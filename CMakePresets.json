@@ -1,33 +1,54 @@
 {
   "version": 3,
-  "cmakeMinimumRequired": { "major": 3, "minor": 30, "patch": 0 },
+  "cmakeMinimumRequired": { "major": 3, "minor": 26, "patch": 0 },
   "configurePresets": [
     {
-      "name":    "debug",
-      "displayName":"Debug",
-      "generator":"Ninja",
-      "binaryDir":"${sourceDir}/target/debug",
+      "name": "llvm-local-debug",
+      "displayName": "Debug (local LLVM)",
+      "description": "Use local LLVM for debug builds",
+      "binaryDir": "${sourceDir}/build/debug",
+      "toolchainFile": "cmake/toolchain-llvm-local.cmake",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE":"Debug"
+        "CMAKE_BUILD_TYPE": "Debug"
+      },
+      "environment": {
+        "LLVM_ROOT": "$env{HOME}/tools/llvm/LLVM-20.1.0-Linux-X64",
+        "CMAKE_PREFIX_PATH": "$env{HOME}/.local/usr:$penv{CMAKE_PREFIX_PATH}",
+        "PKG_CONFIG_PATH": "$env{HOME}/.local/usr/lib64/pkgconfig:$penv{PKG_CONFIG_PATH}",
+        "LD_LIBRARY_PATH": "$env{HOME}/.local/usr/lib64:$penv{LD_LIBRARY_PATH}"
       }
     },
     {
-      "name":    "release",
-      "displayName":"Release",
-      "generator":"Ninja",
-      "binaryDir":"${sourceDir}/target/release",
+      "name": "llvm-local-release",
+      "displayName": "Release (local LLVM)",
+      "inherits": "llvm-local-debug",
+      "binaryDir": "${sourceDir}/build/release",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE":"Release"
+        "CMAKE_BUILD_TYPE": "Release"
       }
     },
     {
-      "name":    "relwithdebinfo",
-      "displayName":"RelWithDebInfo",
-      "generator":"Ninja",
-      "binaryDir":"${sourceDir}/target/relwithdebinfo",
+      "name": "llvm-local-relwithdebinfo",
+      "displayName": "RelWithDebInfo (local LLVM)",
+      "inherits": "llvm-local-debug",
+      "binaryDir": "${sourceDir}/build/relwithdebinfo",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE":"RelWithDebInfo"
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
       }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "build-debug",
+      "configurePreset": "llvm-local-debug"
+    },
+    {
+      "name": "build-release",
+      "configurePreset": "llvm-local-release"
+    },
+    {
+      "name": "build-relwithdebinfo",
+      "configurePreset": "llvm-local-relwithdebinfo"
     }
   ]
 }
