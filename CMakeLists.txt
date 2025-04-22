@@ -18,68 +18,64 @@ set(FETCHCONTENT_BASE_DIR "${CMAKE_BINARY_DIR}/_deps"
 # ----------------------------------------------------------------------------
 # Vulkan
 # ----------------------------------------------------------------------------
-find_package(Vulkan QUIET)
-if(NOT Vulkan_FOUND)
-    message(STATUS "Vulkan not found—fetching Vulkan-Headers & Vulkan-Loader")
-    # Headers
-    FetchContent_Declare(
-            Vulkan-Headers
-            GIT_REPOSITORY https://github.com/KhronosGroup/Vulkan-Headers.git
-            GIT_TAG        vulkan-sdk-1.4.309.0
-    )
-    # Loader
-    set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
-    FetchContent_Declare(
-            Vulkan-Loader
-            GIT_REPOSITORY https://github.com/KhronosGroup/Vulkan-Loader.git
-            GIT_TAG        vulkan-sdk-1.4.309.0
-    )
-    FetchContent_MakeAvailable(Vulkan-Headers Vulkan-Loader)
 
-    # Expose a Vulkan::Vulkan target
-    add_library(vulkan STATIC
-            $<TARGET_OBJECTS:Vulkan-Loader>
-    )
-    target_include_directories(vulkan PUBLIC
-            ${vulkan-headers_SOURCE_DIR}/include
-    )
-    add_library(Vulkan::Vulkan ALIAS vulkan)
-else()
-    message(STATUS "Using system Vulkan")
+# pick a version and root for your unpacked SDK
+set(VULKAN_SDK_VERSION "1.4.309.0")
+set(VULKAN_SDK_ROOT   "$ENV{HOME}/tools/vulkan/${VULKAN_SDK_VERSION}/x86_64")
+
+# 1) Try system Vulkan
+find_package(Vulkan QUIET)
+
+# 2) Fallback to your local SDK if system failed
+if(NOT Vulkan_FOUND)
+    if(EXISTS "${VULKAN_SDK_ROOT}")
+        message(STATUS "Using Vulkan SDK at ${VULKAN_SDK_ROOT}")
+        # let FindVulkan know where the SDK lives (added in CMake 3.18)&#8203;:contentReference[oaicite:2]{index=2}
+        set(ENV{VULKAN_SDK} "${VULKAN_SDK_ROOT}")
+        # Ensure CMAKE_FIND_* paths include your SDK’s include/& lib directories&#8203;:contentReference[oaicite:3]{index=3}
+        list(APPEND CMAKE_PREFIX_PATH "${VULKAN_SDK_ROOT}")
+        # And re‑invoke find_package so it actually picks up headers & loader from there
+        find_package(Vulkan REQUIRED)
+    else()
+        message(FATAL_ERROR
+                "Vulkan not found: neither system Vulkan nor SDK at\n  ${VULKAN_SDK_ROOT}")
+    endif()
 endif()
+
+# At this point: Vulkan_FOUND is true and
+# Vulkan_INCLUDE_DIRS / Vulkan_LIBRARIES are set correctly.
+message(STATUS "Vulkan include dirs: ${Vulkan_INCLUDE_DIRS}")
+message(STATUS "Vulkan libraries:     ${Vulkan_LIBRARIES}")
 
 # ----------------------------------------------------------------------------
 # GLFW
 # ----------------------------------------------------------------------------
+
+# First try system install
 find_package(glfw3 CONFIG QUIET)
-if(NOT TARGET glfw)
-    message(STATUS "GLFW not found—fetching glfw")
-    FetchContent_Declare(
-            glfw
-            GIT_REPOSITORY https://github.com/glfw/glfw.git
-            GIT_TAG        3.3.10
+
+# If that fails, look in ~/tools/glfw
+if (NOT TARGET glfw)
+    find_package(glfw3 CONFIG REQUIRED
+            PATHS "$ENV{HOME}/tools/glfw"
+            NO_DEFAULT_PATH
     )
-    set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    set(GLFW_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable(glfw)
-else()
-    message(STATUS "Using system GLFW")
 endif()
 
 # ----------------------------------------------------------------------------
 # GLM
 # ----------------------------------------------------------------------------
+
+# First try system install
 find_package(glm CONFIG QUIET)
-if(NOT TARGET glm::glm)
-    message(STATUS "GLM not found—fetching glm")
-    FetchContent_Declare(
-            glm
-            GIT_REPOSITORY https://github.com/g-truc/glm.git
-            GIT_TAG        1.0.1
+
+# If that fails, look in ~/tools/lm
+if (NOT TARGET glm::glm)
+    message(STATUS "System GLM not found; checking ~/tools/glm")
+    find_package(glm CONFIG REQUIRED
+            PATHS "$ENV{HOME}/tools/glm"
+            NO_DEFAULT_PATH
     )
-    FetchContent_MakeAvailable(glm)
-else()
-    message(STATUS "Using system GLM")
 endif()
 
 # ----------------------------------------------------------------------------
