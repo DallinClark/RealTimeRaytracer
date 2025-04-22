@@ -7,7 +7,7 @@ endif()
 set(LLVM_ROOT $ENV{LLVM_ROOT} CACHE PATH "Local LLVM root")
 
 # Use clang/clang++ from there:
-set(CMAKE_C_COMPILER   "${LLVM_ROOT}/bin/clang"  CACHE FILEPATH "" FORCE)
+set(CMAKE_C_COMPILER   "${LLVM_ROOT}/bin/clang"   CACHE FILEPATH "" FORCE)
 set(CMAKE_CXX_COMPILER "${LLVM_ROOT}/bin/clang++" CACHE FILEPATH "" FORCE)
 
 # Force C++23:

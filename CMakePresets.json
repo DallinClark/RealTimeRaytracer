@@ -12,10 +12,14 @@
         "CMAKE_BUILD_TYPE": "Debug"
       },
       "environment": {
-        "LLVM_ROOT": "$env{HOME}/tools/llvm/LLVM-20.1.0-Linux-X64",
-        "CMAKE_PREFIX_PATH": "$env{HOME}/.local/usr:$penv{CMAKE_PREFIX_PATH}",
-        "PKG_CONFIG_PATH": "$env{HOME}/.local/usr/lib64/pkgconfig:$penv{PKG_CONFIG_PATH}",
-        "LD_LIBRARY_PATH": "$env{HOME}/.local/usr/lib64:$penv{LD_LIBRARY_PATH}"
+        "LLVM_ROOT":         "$env{HOME}/tools/llvm/LLVM-20.1.0-Linux-X64",
+        "PREFIX":            "$env{HOME}/.local/usr",
+        "CPATH":             "$env{PREFIX}/include:$penv{CPATH}",
+        "LIBRARY_PATH":      "$env{PREFIX}/lib64:$env{PREFIX}/lib:$penv{LIBRARY_PATH}",
+        "CMAKE_PREFIX_PATH": "$env{PREFIX}:$penv{CMAKE_PREFIX_PATH}",
+        "PKG_CONFIG_PATH":   "$env{PREFIX}/lib64/pkgconfig:$env{PREFIX}/lib/pkgconfig:$penv{PKG_CONFIG_PATH}",
+        "LD_LIBRARY_PATH":   "$env{PREFIX}/lib64:$env{PREFIX}/lib:$penv{LD_LIBRARY_PATH}",
+        "PATH":              "$env{PREFIX}/bin:$penv{PATH}"
       }
     },
     {
