@@ -9,13 +9,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # ----------------------------------------------------------------------------
-# FetchContent configuration: put all sources/builds inside the build tree
-# ----------------------------------------------------------------------------
-include(FetchContent)
-set(FETCHCONTENT_BASE_DIR "${CMAKE_BINARY_DIR}/_deps"
-        CACHE PATH "Base directory for FetchContent downloads and builds")
-
-# ----------------------------------------------------------------------------
 # Vulkan
 # ----------------------------------------------------------------------------
 
@@ -23,16 +16,16 @@ set(FETCHCONTENT_BASE_DIR "${CMAKE_BINARY_DIR}/_deps"
 set(VULKAN_SDK_VERSION "1.4.309.0")
 set(VULKAN_SDK_ROOT   "$ENV{HOME}/tools/vulkan/${VULKAN_SDK_VERSION}/x86_64")
 
-# 1) Try system Vulkan
+# Try system Vulkan
 find_package(Vulkan QUIET)
 
-# 2) Fallback to your local SDK if system failed
+# Fallback to your local SDK if system failed
 if(NOT Vulkan_FOUND)
     if(EXISTS "${VULKAN_SDK_ROOT}")
         message(STATUS "Using Vulkan SDK at ${VULKAN_SDK_ROOT}")
-        # let FindVulkan know where the SDK lives (added in CMake 3.18)&#8203;:contentReference[oaicite:2]{index=2}
+        # let FindVulkan know where the SDK lives
         set(ENV{VULKAN_SDK} "${VULKAN_SDK_ROOT}")
-        # Ensure CMAKE_FIND_* paths include your SDK’s include/& lib directories&#8203;:contentReference[oaicite:3]{index=3}
+        # Ensure CMAKE_FIND_* paths include your SDK’s include
         list(APPEND CMAKE_PREFIX_PATH "${VULKAN_SDK_ROOT}")
         # And re‑invoke find_package so it actually picks up headers & loader from there
         find_package(Vulkan REQUIRED)
