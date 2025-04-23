@@ -8,6 +8,8 @@
 
 #include <print>
 
+import Sphere;
+
 int main() {
     glfwInit();
 
