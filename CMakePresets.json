@@ -5,6 +5,7 @@
     {
       "name": "llvm-local-debug",
       "displayName": "Debug (local LLVM)",
+      "generator": "Ninja",
       "description": "Use local LLVM for debug builds",
       "binaryDir": "${sourceDir}/build/debug",
       "toolchainFile": "cmake/toolchain-llvm-local.cmake",
