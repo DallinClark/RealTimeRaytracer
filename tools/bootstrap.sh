@@ -22,11 +22,11 @@ done
 ENV_LINES=(
   'export PREFIX="${PREFIX:-$HOME/.local/usr}"'
   'export PATH="$HOME/.local/bin:$HOME/bin:$HOME/.cargo/bin:$PATH"'
-  'export CPATH="$PREFIX/include${CPATH:+:}$CPATH"'
-  'export LIBRARY_PATH="$PREFIX/lib64:$PREFIX/lib${LIBRARY_PATH:+:}$LIBRARY_PATH"'
-  'export LD_LIBRARY_PATH="$PREFIX/lib64:$PREFIX/lib${LD_LIBRARY_PATH:+:}$LD_LIBRARY_PATH"'
-  'export PKG_CONFIG_PATH="$PREFIX/lib64/pkgconfig:$PREFIX/lib/pkgconfig"'
-  'export CMAKE_PREFIX_PATH="$PREFIX${CMAKE_PREFIX_PATH:+:}$CMAKE_PREFIX_PATH"'
+  'export CPATH="$PREFIX/include${CPATH:+:}${CPATH:-}"'
+  'export LIBRARY_PATH="$PREFIX/lib64:$PREFIX/lib${LIBRARY_PATH:+:}${LIBRARY_PATH:-}"'
+  'export LD_LIBRARY_PATH="$PREFIX/lib64:$PREFIX/lib${LD_LIBRARY_PATH:+:}${LD_LIBRARY_PATH:-}"'
+  'export PKG_CONFIG_PATH="$PREFIX/lib64/pkgconfig:$PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:}${PKG_CONFIG_PATH:-}"'
+  'export CMAKE_PREFIX_PATH="$PREFIX${CMAKE_PREFIX_PATH:+:}${CMAKE_PREFIX_PATH:-}"'
 )
 
 echo "→ Updating ~/.bashrc with library paths…"
