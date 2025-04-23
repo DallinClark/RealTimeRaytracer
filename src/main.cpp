@@ -8,8 +8,6 @@
 
 #include <print>
 
-import Sphere;
-
 int main() {
     glfwInit();
 
@@ -19,7 +17,7 @@ int main() {
     uint32_t extensionCount = 0;
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
 
-    std::print("{} extensions supported", extensionCount);
+    std::println("{} extensions supported", extensionCount);
 
     glm::mat4 matrix;
     glm::vec4 vec;
