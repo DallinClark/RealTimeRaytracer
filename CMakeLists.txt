@@ -1,4 +1,5 @@
-cmake_minimum_required(VERSION 3.26)
+cmake_minimum_required(VERSION 3.28)
+set(CMAKE_EXPERIMENTAL_CXX_MODULE_CMAKE_API ON)
 project(RealTimeRaytracer LANGUAGES CXX)
 
 # ----------------------------------------------------------------------------
@@ -89,6 +90,20 @@ endif()
 # ----------------------------------------------------------------------------
 add_executable(${PROJECT_NAME}
         src/main.cpp
+)
+
+# --- MODULE SUPPORT -----------------------------------------
+file(GLOB_RECURSE MODULE_SOURCES
+        CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cppm"
+)
+
+# Tell CMake that these files are CXX_MODULES for our target
+target_sources(${PROJECT_NAME}
+    PUBLIC
+        FILE_SET CXX_MODULES
+        FILES
+            ${MODULE_SOURCES}
 )
 
 # include Vulkan headers if we fetched them
