@@ -1,6 +1,5 @@
 module;
 
-#include <utility>
 #include <format>
 #include <glm/vec3.hpp>
 
