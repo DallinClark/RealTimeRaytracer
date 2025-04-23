@@ -38,6 +38,7 @@ for line in "${ENV_LINES[@]}"; do
     echo "   • Already present: $line"
   fi
 done
+source "$HOME/.bashrc"
 
 # ────────────────────────────────────────────────────────────────────────────────
 # 2) LLVM 20.1.0
