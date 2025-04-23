@@ -53,14 +53,27 @@ message(STATUS "Vulkan libraries:     ${Vulkan_LIBRARIES}")
 
 # First try system install
 find_package(glfw3 CONFIG QUIET)
-
-# If that fails, look in ~/tools/glfw
-if (NOT TARGET glfw)
-    find_package(glfw3 CONFIG REQUIRED
+if (TARGET glfw)
+    message(STATUS "Using system-installed GLFW")
+else()
+    # Try ~/tools/glfw next
+    find_package(glfw3 CONFIG QUIET
             PATHS "$ENV{HOME}/tools/glfw"
             NO_DEFAULT_PATH
     )
+    if (TARGET glfw)
+        message(STATUS "Using GLFW from $ENV{HOME}/tools/glfw")
+    else()
+        message(FATAL_ERROR
+                "Could not find GLFW:\n"
+                "  - not found as a system-installed package\n"
+                "  - not found in $ENV{HOME}/tools/glfw\n"
+                "Please install GLFW or adjust CMAKE_PREFIX_PATH."
+        )
+    endif()
 endif()
+
+
 
 # ----------------------------------------------------------------------------
 # GLM
