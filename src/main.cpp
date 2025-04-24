@@ -8,11 +8,11 @@
 
 #include <print>
 
-int main() {
-    glfwInit();
+import WindowManager;
 
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    GLFWwindow* window = glfwCreateWindow(800, 600, "Vulkan window", nullptr, nullptr);
+int main() {
+    app::WindowManager wm{"RealTimeRayTracer", 800, 600};
+    GLFWwindow* window = wm.getWindow();
 
     uint32_t extensionCount = 0;
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
@@ -26,10 +26,6 @@ int main() {
     while(!glfwWindowShouldClose(window)) {
         glfwPollEvents();
     }
-
-    glfwDestroyWindow(window);
-
-    glfwTerminate();
 
     return 0;
 }
