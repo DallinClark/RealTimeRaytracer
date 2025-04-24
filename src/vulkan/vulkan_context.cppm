@@ -1,13 +1,17 @@
 module;
+
 #include <vector>
 #include <string>
 #include <stdexcept>
+
+#define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #include <vulkan/vulkan.hpp>
-export module VulkanDevice;
+
+export module VulkanContext;
 
 export namespace vulkan  {
 
-class VulkanDevice {
+class VulkanContext {
 public:
     vk::UniqueInstance   instance;
     vk::PhysicalDevice   physicalDevice;
@@ -15,8 +19,10 @@ public:
     vk::Queue            graphicsQueue;
     uint32_t             graphicsQueueFamily = 0;
 
-    explicit VulkanDevice(std::string_view appName = "RealTimeRaytracer");
-    ~VulkanDevice() = default;  // All destruction is automatic
+    vk::detail::DispatchLoaderDynamic dldi;
+
+    explicit VulkanContext(std::string_view appName = "RealTimeRaytracer");
+    ~VulkanContext() = default;  // All destruction is automatic
 
 private:
     static constexpr std::array<const char*, 4> RequiredExtensions{
@@ -33,15 +39,21 @@ private:
     bool isRayTracingCapable(vk::PhysicalDevice device) noexcept;
 };
 
-VulkanDevice::VulkanDevice(const std::string_view appName) {
+VulkanContext::VulkanContext(const std::string_view appName) {
     createInstance(appName);
+    vk::detail::DynamicLoader dyn;
+    dldi.init( instance.get(),
+              dyn.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr") );
+
     pickPhysicalDevice();
     createLogicalDevice();
+    dldi.init(device.get());
 
     graphicsQueue = device->getQueue(graphicsQueueFamily, 0);
+
 }
 
-void VulkanDevice::createInstance(std::string_view appName) {
+void VulkanContext::createInstance(std::string_view appName) {
     vk::ApplicationInfo appInfo {};
     appInfo.pApplicationName   = appName.data();
     appInfo.applicationVersion = VK_MAKE_VERSION(1,0,0);
@@ -56,7 +68,7 @@ void VulkanDevice::createInstance(std::string_view appName) {
     instance = vk::createInstanceUnique(instanceInfo);
 }
 
-void VulkanDevice::pickPhysicalDevice() {
+void VulkanContext::pickPhysicalDevice() {
     for (auto& device : instance->enumeratePhysicalDevices()) {
         if (isRayTracingCapable(device)) {
             physicalDevice = device;
@@ -66,7 +78,7 @@ void VulkanDevice::pickPhysicalDevice() {
     throw std::runtime_error("No GPU found with Vulkan ray tracing support");
 }
 
-bool VulkanDevice::isRayTracingCapable(const vk::PhysicalDevice device) noexcept {
+bool VulkanContext::isRayTracingCapable(const vk::PhysicalDevice device) noexcept {
     // Check extensions
     auto availibleExtensions = device.enumerateDeviceExtensionProperties();
     for (auto const* requiredExtension : RequiredExtensions) {
@@ -94,7 +106,7 @@ bool VulkanDevice::isRayTracingCapable(const vk::PhysicalDevice device) noexcept
     return false; // No graphics queue found
 }
 
-void VulkanDevice::createLogicalDevice() {
+void VulkanContext::createLogicalDevice() {
     constexpr float priority = 1.0f;
     vk::DeviceQueueCreateInfo queueInfo {};
     queueInfo.queueFamilyIndex = graphicsQueueFamily;
