@@ -38,14 +38,14 @@ for line in "${ENV_LINES[@]}"; do
     echo "   • Already present: $line"
   fi
 done
-source "$HOME/.bashrc"
+#source "$HOME/.bashrc"
 
 # ────────────────────────────────────────────────────────────────────────────────
 # 2) LLVM 20.1.0
 # ────────────────────────────────────────────────────────────────────────────────
 LLVM_VER="20.1.0"
 PLATFORM="Linux-X64"
-URL_BASE="https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VER}"
+URL_BASE="https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VER}"git
 LLVM_DEST="$HOME/tools/llvm"
 LLVM_TARBALL="LLVM-${LLVM_VER}-${PLATFORM}.tar.xz"
 UNPACK_DIR="${LLVM_DEST}/LLVM-${LLVM_VER}-${PLATFORM}"

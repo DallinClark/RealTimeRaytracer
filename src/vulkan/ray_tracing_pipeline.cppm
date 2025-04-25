@@ -123,7 +123,7 @@ RayTracingPipeline::RayTracingPipeline(
         {},        // vk::PipelineCache    = VK_NULL_HANDLE
         pipelineInfo,
         nullptr,   // vk::AllocationCallbacks = VK_NULL_HANDLE
-        context.dldi
+        VULKAN_HPP_DEFAULT_DISPATCHER
     );
     pipeline = std::move(result.value);
 }

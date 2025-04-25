@@ -90,6 +90,7 @@ endif()
 # ----------------------------------------------------------------------------
 add_executable(${PROJECT_NAME}
         src/main.cpp
+        src/app/window.cppm
 )
 
 # --- MODULE SUPPORT -----------------------------------------

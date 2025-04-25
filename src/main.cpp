@@ -9,10 +9,13 @@
 #include <print>
 
 import WindowManager;
+import VulkanContext;
 
 int main() {
     app::WindowManager wm{"RealTimeRayTracer", 800, 600};
     GLFWwindow* window = wm.getWindow();
+
+    vulkan::VulkanContext vkContext{};
 
     uint32_t extensionCount = 0;
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
