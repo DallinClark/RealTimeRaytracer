@@ -21,28 +21,39 @@ public:
     vk::UniqueInstance   instance;
     vk::PhysicalDevice   physicalDevice;
     vk::UniqueDevice     device;
+    vk::UniqueSurfaceKHR surface;
     vk::Queue            graphicsQueue;
-    uint32_t             graphicsQueueFamily = 0;
+    vk::Queue            presentQueue;
+    uint32_t             graphicsQueueFamily = UINT32_MAX;
+    uint32_t             presentQueueFamily  = UINT32_MAX;
 
-    explicit VulkanContext(std::string_view appName = "RealTimeRaytracer");
+    explicit VulkanContext(std::string_view appName = "RealTimeRaytracer", GLFWwindow* window = nullptr);
     ~VulkanContext() = default;  // All destruction is automatic
 
 private:
-    static constexpr std::array<const char*, 4> RequiredExtensions{
+    struct SwapChainSupportDetails {
+        vk::SurfaceCapabilitiesKHR capabilities;
+        std::vector<vk::SurfaceFormatKHR> formats;
+        std::vector<vk::PresentModeKHR> presentModes;
+    };
+
+    static constexpr std::array<const char*, 5> RequiredExtensions{
         VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
         VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
         VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
-        VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME
+        VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME
     };
 
     void createInstance(std::string_view appName);
     void pickPhysicalDevice();
     void createLogicalDevice();
-
+    void createSurface(GLFWwindow* window);
     bool isRayTracingCapable(vk::PhysicalDevice device) noexcept;
+    SwapChainSupportDetails querySwapChainSupport(vk::PhysicalDevice testDevice);
 };
 
-VulkanContext::VulkanContext(const std::string_view appName) {
+VulkanContext::VulkanContext(const std::string_view appName, GLFWwindow* window) {
     // load the Vulkan loader and initialize the default dispatcher with that loader
     vk::detail::DynamicLoader dyn;
     VULKAN_HPP_DEFAULT_DISPATCHER.init(dyn);
@@ -51,6 +62,7 @@ VulkanContext::VulkanContext(const std::string_view appName) {
 
     // after instance exists, pull in instance‐level functions
     VULKAN_HPP_DEFAULT_DISPATCHER.init(instance.get());
+    createSurface(window);
 
     pickPhysicalDevice();
     createLogicalDevice();
@@ -102,20 +114,32 @@ void VulkanContext::createInstance(std::string_view appName) {
     }
 }
 
+void VulkanContext::createSurface(GLFWwindow* window) {
+    VkSurfaceKHR _surface;
+    VkResult err = glfwCreateWindowSurface( VkInstance( instance.get() ), window, nullptr, &_surface );
+    if ( err != VK_SUCCESS )
+        throw std::runtime_error( "Failed to create window!" );
+
+    vk::detail::ObjectDestroy<vk::Instance, VULKAN_HPP_DEFAULT_DISPATCHER_TYPE> _deleter( instance.get() );
+    surface = vk::UniqueSurfaceKHR( vk::SurfaceKHR( _surface ), _deleter );
+}
+
 void VulkanContext::pickPhysicalDevice() {
-    try {
-        for (auto &currDevice: instance->enumeratePhysicalDevices()) {
-            if (isRayTracingCapable(currDevice)) {
-                physicalDevice = currDevice;
-                return;
-            }
+    for (auto &currDevice: instance->enumeratePhysicalDevices()) {
+        if (isRayTracingCapable(currDevice)) {
+            physicalDevice = currDevice;
+            return;
         }
-        throw std::runtime_error("No GPU found with Vulkan ray tracing support");
     }
-    catch (std::runtime_error& err) {
-        std::cerr << err.what();
-        std::terminate();
-    }
+    throw std::runtime_error("No GPU found with Vulkan ray tracing support");
+}
+
+VulkanContext::SwapChainSupportDetails VulkanContext::querySwapChainSupport(vk::PhysicalDevice testDevice) {
+    SwapChainSupportDetails details;
+    details.capabilities = testDevice.getSurfaceCapabilitiesKHR(surface.get());
+    details.formats     = testDevice.getSurfaceFormatsKHR(      surface.get());
+    details.presentModes = testDevice.getSurfacePresentModesKHR(surface.get());
+    return details;
 }
 
 bool VulkanContext::isRayTracingCapable(const vk::PhysicalDevice testDevice) noexcept {
@@ -134,24 +158,50 @@ bool VulkanContext::isRayTracingCapable(const vk::PhysicalDevice testDevice) noe
         }
     }
 
-    // Find graphics queue
+    SwapChainSupportDetails swapChainSupport = querySwapChainSupport(testDevice);
+    bool swapChainAdequate =
+            !swapChainSupport.formats.empty() &&
+            !swapChainSupport.presentModes.empty();
+    if (!swapChainAdequate) {
+        return false;
+    }
+
+
+    // TODO clean this up
     auto families = testDevice.getQueueFamilyProperties();
-    for (std::vector<vk::QueueFamilyProperties>::size_type i = 0; i < families.size(); ++i) {
-        if (families[i].queueFlags & vk::QueueFlagBits::eGraphics) {
-            graphicsQueueFamily = i;
+    uint32_t g = UINT32_MAX, p = UINT32_MAX;
+    for (uint32_t i = 0; i < families.size(); ++i) {
+        bool isGraphics = static_cast<bool>(families[i].queueFlags & vk::QueueFlagBits::eGraphics);
+        bool isPresent = testDevice.getSurfaceSupportKHR(i, surface.get());
+        if (isGraphics) g = i;
+        if (isPresent) p = i;
+        if (isGraphics && isPresent) {
             return true;
         }
     }
-
-    return false; // No graphics queue found
+    if (g != UINT32_MAX || p != UINT32_MAX) {
+        return false;
+    }
+    return true;
 }
 
 void VulkanContext::createLogicalDevice() {
     constexpr float priority = 1.0f;
-    vk::DeviceQueueCreateInfo queueInfo {};
-    queueInfo.queueFamilyIndex = graphicsQueueFamily;
-    queueInfo.queueCount       = 1;
-    queueInfo.pQueuePriorities = &priority;
+
+    std::vector<vk::DeviceQueueCreateInfo> queueInfos;
+    vk::DeviceQueueCreateInfo gfxQueueInfo{};
+    gfxQueueInfo.queueFamilyIndex = graphicsQueueFamily;
+    gfxQueueInfo.queueCount       = 1;
+    gfxQueueInfo.pQueuePriorities = &priority;
+    queueInfos.push_back(gfxQueueInfo);
+
+    if (presentQueueFamily != graphicsQueueFamily) {
+        vk::DeviceQueueCreateInfo presQueueInfo{};
+        presQueueInfo.queueFamilyIndex = presentQueueFamily;
+        presQueueInfo.queueCount       = 1;
+        presQueueInfo.pQueuePriorities = &priority;
+        queueInfos.push_back(presQueueInfo);
+    }
 
     // Enable ray-tracing features in a pNext chain
     vk::PhysicalDeviceRayTracingPipelineFeaturesKHR rtFeatures {};
@@ -167,12 +217,15 @@ void VulkanContext::createLogicalDevice() {
 
     vk::DeviceCreateInfo deviceInfo {};
     deviceInfo.pNext                   = &bufAddrFeatures;
-    deviceInfo.queueCreateInfoCount    = 1;
-    deviceInfo.pQueueCreateInfos       = &queueInfo;
+    deviceInfo.queueCreateInfoCount    = static_cast<uint32_t>(queueInfos.size());
+    deviceInfo.pQueueCreateInfos       = queueInfos.data();
     deviceInfo.enabledExtensionCount   = static_cast<uint32_t>(RequiredExtensions.size());
     deviceInfo.ppEnabledExtensionNames = RequiredExtensions.data();
 
     device = physicalDevice.createDeviceUnique(deviceInfo);
+
+    graphicsQueue = device->getQueue(graphicsQueueFamily, 0);
+    presentQueue  = device->getQueue(presentQueueFamily,  0);
 }
 
 } // namespace vulkan
