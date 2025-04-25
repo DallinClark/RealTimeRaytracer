@@ -22,6 +22,11 @@ public:
     vk::PhysicalDevice   physicalDevice;
     vk::UniqueDevice     device;
     vk::UniqueSurfaceKHR surface;
+    vk::UniqueSwapchainKHR swapChain;
+    std::vector<vk::Image> swapChainImages;
+    std::vector<vk::ImageView> swapChainImageViews;
+    vk::Format swapChainImageFormat;
+    vk::Extent2D swapChainExtent;
     vk::Queue            graphicsQueue;
     vk::Queue            presentQueue;
     uint32_t             graphicsQueueFamily = UINT32_MAX;
@@ -49,7 +54,9 @@ private:
     void pickPhysicalDevice();
     void createLogicalDevice();
     void createSurface(GLFWwindow* window);
-    bool isRayTracingCapable(vk::PhysicalDevice device) noexcept;
+    void createSwapChain(GLFWwindow* window);
+    void createImageViews();
+    bool isDeviceCompatible(vk::PhysicalDevice device) noexcept;
     SwapChainSupportDetails querySwapChainSupport(vk::PhysicalDevice testDevice);
 };
 
@@ -66,11 +73,10 @@ VulkanContext::VulkanContext(const std::string_view appName, GLFWwindow* window)
 
     pickPhysicalDevice();
     createLogicalDevice();
-
-    // after device exists, pull in device‐level functions
     VULKAN_HPP_DEFAULT_DISPATCHER.init(device.get());
 
-    graphicsQueue = device->getQueue(graphicsQueueFamily, 0);
+    createSwapChain(window);
+    createImageViews();
 }
 
 void VulkanContext::createInstance(std::string_view appName) {
@@ -124,9 +130,128 @@ void VulkanContext::createSurface(GLFWwindow* window) {
     surface = vk::UniqueSurfaceKHR( vk::SurfaceKHR( _surface ), _deleter );
 }
 
+void VulkanContext::createSwapChain(GLFWwindow* window) {
+    // First, find properties of swap chain
+    SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice);
+
+    const std::vector<vk::SurfaceFormatKHR> availableFormats = swapChainSupport.formats;
+    vk::SurfaceFormatKHR surfaceFormat = availableFormats[0];
+
+    for (const auto& availableFormat : availableFormats) {
+        if (availableFormat.format == vk::Format::eB8G8R8A8Srgb  &&
+            availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
+            surfaceFormat = availableFormat;
+            continue;
+        }
+    }
+
+    std::vector<vk::PresentModeKHR> availableModes = swapChainSupport.presentModes;
+    vk::PresentModeKHR presentMode = vk::PresentModeKHR::eFifo;
+
+    for (const auto& availableMode : availableModes) {
+        if (availableMode == vk::PresentModeKHR::eMailbox) {
+            presentMode = availableMode;
+        }
+    }
+
+    vk::SurfaceCapabilitiesKHR surfaceCapabilities = swapChainSupport.capabilities;
+    VkExtent2D extent;
+    if ( surfaceCapabilities.currentExtent.width == std::numeric_limits<uint32_t>::max() ) {
+        int width, height;
+        glfwGetFramebufferSize(window, &width, &height);
+
+        VkExtent2D actualExtent = {
+                static_cast<uint32_t>(width),
+                static_cast<uint32_t>(height)
+        };
+
+        actualExtent.width = std::clamp(actualExtent.width, surfaceCapabilities.minImageExtent.width,
+                                        surfaceCapabilities.maxImageExtent.width);
+        actualExtent.height = std::clamp(actualExtent.height, surfaceCapabilities.minImageExtent.height,
+                                         surfaceCapabilities.maxImageExtent.height);
+
+        extent = actualExtent;
+    }
+    else {
+        // If the surface size is defined, the swap chain size must match
+        extent = surfaceCapabilities.currentExtent;
+    }
+
+    vk::CompositeAlphaFlagBitsKHR compositeAlpha =
+            ( surfaceCapabilities.supportedCompositeAlpha & vk::CompositeAlphaFlagBitsKHR::ePreMultiplied )
+            ? vk::CompositeAlphaFlagBitsKHR::ePreMultiplied
+            : ( surfaceCapabilities.supportedCompositeAlpha & vk::CompositeAlphaFlagBitsKHR::ePostMultiplied )
+              ? vk::CompositeAlphaFlagBitsKHR::ePostMultiplied
+              : ( surfaceCapabilities.supportedCompositeAlpha & vk::CompositeAlphaFlagBitsKHR::eInherit )
+                ? vk::CompositeAlphaFlagBitsKHR::eInherit
+                : vk::CompositeAlphaFlagBitsKHR::eOpaque;
+
+    // Actually making the swap chain
+    uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
+    if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount) {
+        imageCount = swapChainSupport.capabilities.maxImageCount;
+    }
+
+    vk::SwapchainCreateInfoKHR createInfo{};
+    createInfo.sType = vk::StructureType::eSwapchainCreateInfoKHR;
+    createInfo.surface = surface.get();
+    createInfo.minImageCount = imageCount;
+    createInfo.imageFormat = surfaceFormat.format;
+    createInfo.imageColorSpace = surfaceFormat.colorSpace;
+    createInfo.imageExtent = extent;
+    createInfo.imageArrayLayers = 1;
+    createInfo.imageUsage = vk::ImageUsageFlagBits::eColorAttachment; // This may need to get changed for denoising, not sure
+
+    if (graphicsQueueFamily != presentQueueFamily) {
+        std::array<uint32_t,2> queueFamilies = { graphicsQueueFamily, presentQueueFamily };
+        createInfo.imageSharingMode = vk::SharingMode::eConcurrent;
+        createInfo.queueFamilyIndexCount = 2;
+        createInfo.pQueueFamilyIndices = queueFamilies.data();
+    } else {
+        createInfo.imageSharingMode = vk::SharingMode::eExclusive;
+        createInfo.queueFamilyIndexCount = 0; // Optional
+        createInfo.pQueueFamilyIndices = nullptr; // Optional
+    }
+
+    createInfo.preTransform = swapChainSupport.capabilities.currentTransform; // Specifies a transform to every image
+    createInfo.compositeAlpha = compositeAlpha;
+    createInfo.presentMode = presentMode;
+    createInfo.clipped = VK_TRUE; // doesn't worry about pixels that are obscured
+    createInfo.oldSwapchain = VK_NULL_HANDLE; // might need to change to allow for resizing window
+    swapChain = device->createSwapchainKHRUnique( createInfo );
+
+    swapChainImages = device->getSwapchainImagesKHR( swapChain.get() );
+    swapChainImageFormat = surfaceFormat.format;
+    swapChainExtent = extent;
+}
+
+void VulkanContext::createImageViews() {
+    swapChainImageViews.resize(swapChainImages.size());
+    for (size_t i = 0; i < swapChainImages.size(); i++) {
+        vk::ImageViewCreateInfo createInfo{};
+        createInfo.sType = vk::StructureType::eImageViewCreateInfo;
+        createInfo.image = swapChainImages[i];
+        createInfo.viewType = vk::ImageViewType::e2D;
+        createInfo.format = swapChainImageFormat;
+
+        createInfo.components.r = vk::ComponentSwizzle::eIdentity;
+        createInfo.components.g = vk::ComponentSwizzle::eIdentity;
+        createInfo.components.b = vk::ComponentSwizzle::eIdentity;
+        createInfo.components.a = vk::ComponentSwizzle::eIdentity;
+
+        createInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits ::eColor;
+        createInfo.subresourceRange.baseMipLevel = 0;
+        createInfo.subresourceRange.levelCount = 1;
+        createInfo.subresourceRange.baseArrayLayer = 0;
+        createInfo.subresourceRange.layerCount = 1;
+
+        swapChainImageViews[i] = device->createImageView( createInfo );
+    }
+}
+
 void VulkanContext::pickPhysicalDevice() {
     for (auto &currDevice: instance->enumeratePhysicalDevices()) {
-        if (isRayTracingCapable(currDevice)) {
+        if (isDeviceCompatible(currDevice)) {
             physicalDevice = currDevice;
             return;
         }
@@ -142,7 +267,7 @@ VulkanContext::SwapChainSupportDetails VulkanContext::querySwapChainSupport(vk::
     return details;
 }
 
-bool VulkanContext::isRayTracingCapable(const vk::PhysicalDevice testDevice) noexcept {
+bool VulkanContext::isDeviceCompatible(const vk::PhysicalDevice testDevice) noexcept {
     // Check extensions
     auto availableExtensions = testDevice.enumerateDeviceExtensionProperties();
     for (auto const* requiredExtension : RequiredExtensions) {
@@ -179,7 +304,7 @@ bool VulkanContext::isRayTracingCapable(const vk::PhysicalDevice testDevice) noe
             return true;
         }
     }
-    if (g != UINT32_MAX || p != UINT32_MAX) {
+    if (g == UINT32_MAX || p == UINT32_MAX) {
         return false;
     }
     return true;
@@ -226,6 +351,8 @@ void VulkanContext::createLogicalDevice() {
 
     graphicsQueue = device->getQueue(graphicsQueueFamily, 0);
     presentQueue  = device->getQueue(presentQueueFamily,  0);
+
+
 }
 
 } // namespace vulkan
