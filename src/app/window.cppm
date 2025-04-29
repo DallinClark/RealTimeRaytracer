@@ -19,7 +19,7 @@ private:
     GLFWwindow* window;
 };
 
-WindowManager::WindowManager(std::string_view windowName, const int windowWidth, const int windowHeight) {
+WindowManager::WindowManager(const std::string_view windowName, const int windowWidth, const int windowHeight) {
     if (!glfwInit()) {
         throw std::runtime_error("GLFW initialization failed");
     }
