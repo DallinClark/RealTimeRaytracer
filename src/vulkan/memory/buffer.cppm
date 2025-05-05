@@ -111,9 +111,22 @@ inline void Buffer::unmap() {
 }
 
 inline void Buffer::fill(const void* src, const vk::DeviceSize size, const vk::DeviceSize offset) {
-    auto* dest = static_cast<char*>(map()) + static_cast<size_t>(offset);
-    std::memcpy(dest, src, size);
-    unmap();
+    // map + copy
+    void* mapped = device_.mapMemory(memory_.get(), 0, VK_WHOLE_SIZE);
+    std::memcpy(static_cast<char*>(mapped) + offset, src, size);
+
+    // If non-coherent, flush the written range
+    if (!isHostCoherent_) {
+        const vk::MappedMemoryRange flushRange{
+            memory_.get(),        // VkDeviceMemory memory
+            offset,               // VkDeviceSize offset
+            size                  // VkDeviceSize size
+        };
+        device_.flushMappedMemoryRanges(1, &flushRange);
+    }
+
+    // Unmap
+    device_.unmapMemory(memory_.get());
 }
 
 inline vk::DeviceAddress Buffer::address() const noexcept {
