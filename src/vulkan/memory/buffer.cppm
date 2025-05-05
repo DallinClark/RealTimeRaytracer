@@ -15,6 +15,15 @@ namespace vulkan::memory {
 
 export class Buffer {
 public:
+
+    // — Disable copy semantics —
+    Buffer(const Buffer&) = delete;
+    Buffer& operator=(const Buffer&) = delete;
+
+    // — Enable move semantics —
+    Buffer(Buffer&&) noexcept = default;
+    Buffer& operator=(Buffer&&) noexcept = default;
+
     /// Create a buffer of `size` bytes with given usage and memory properties.
     Buffer(const context::Device& device,
            vk::DeviceSize size,
