@@ -1,7 +1,7 @@
 module;
 
-#include <GLFW/glfw3.h>;
-#include <array>;
+#include <GLFW/glfw3.h>
+#include <array>
 #include <glm/vec2.hpp>
 
 export module input;
