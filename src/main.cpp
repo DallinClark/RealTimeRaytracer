@@ -1,34 +1,17 @@
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+import app;
 
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <glm/vec4.hpp>
-#include <glm/mat4x4.hpp>
-
+#include <cstdlib>
+#include <iostream>
 #include <print>
 
-import WindowManager;
-import VulkanContext;
-
 int main() {
-    app::WindowManager wm{"RealTimeRayTracer", 800, 600};
-    GLFWwindow* window = wm.getWindow();
-
-    // vulkan::VulkanContext vkContext{"RealTimeRaytracer", window};
-
-    uint32_t extensionCount = 0;
-    vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
-
-    std::println("{} extensions supported", extensionCount);
-
-    glm::mat4 matrix;
-    glm::vec4 vec;
-    auto test = matrix * vec;
-
-    while(!glfwWindowShouldClose(window)) {
-        glfwPollEvents();
+    try {
+        app::Application application("Real Time RayTracer", 800, 600, /*enableValidation=*/true);
+        application.run();
     }
-
-    return 0;
+    catch (const std::exception& e) {
+        std::println(std::cerr, "Fatal: {}", e.what());
+        return EXIT_FAILURE;
+    }
+    return EXIT_SUCCESS;
 }
