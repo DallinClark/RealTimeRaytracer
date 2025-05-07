@@ -120,3 +120,8 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
         glfw
         glm::glm
 )
+
+target_compile_definitions(RealTimeRaytracer
+        PRIVATE
+        VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1   # tell every TU to use the dynamic dispatcher
+)

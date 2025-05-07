@@ -1,8 +1,6 @@
 module;
 
-#define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #include <vulkan/vulkan.hpp>
-VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
 #include <vector>
 #include <string_view>
@@ -12,9 +10,10 @@ VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 #include <stdexcept>
 #include <cstring>
 
-import vulkan.context.instance;
-
 export module vulkan.context.device;
+
+import vulkan.context.instance;
+import vulkan.dispatch;
 
 namespace vulkan::context {
 
@@ -184,6 +183,7 @@ inline Device::Device(Instance& instance,
 
     // Create the logical device
     device_ = physicalDevice_.createDeviceUnique(info, nullptr);
+    vulkan::dispatch::init_device(device_.get());
 
     // Retrieve the queues
     computeQueue_ = device_->getQueue(computeFamilyIdx_, 0);

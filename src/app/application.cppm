@@ -1,8 +1,6 @@
 module;
 
-#define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #include <vulkan/vulkan.hpp>
-VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
 #include <GLFW/glfw3.h>
 #include <iostream>
@@ -16,6 +14,7 @@ import vulkan.context.instance;
 import vulkan.context.device;
 import vulkan.context.surface;
 import vulkan.context.swapchain;
+import vulkan.dispatch;
 
 export namespace app {
 
@@ -26,11 +25,13 @@ public:
                 uint32_t height        = 600,
                 bool     enableValidation = true)
     {
+        vulkan::dispatch::init_loader();
+
         // ---- GLFW window setup ----
         if (!glfwInit())
             throw std::runtime_error("Failed to initialize GLFW");
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        window_ = glfwCreateWindow(int(width), int(height), title.data(), nullptr, nullptr);
+        window_ = glfwCreateWindow(static_cast<int>(width), static_cast<int>(height), title.data(), nullptr, nullptr);
         if (!window_) {
             glfwTerminate();
             throw std::runtime_error("Failed to create GLFW window");
@@ -57,10 +58,10 @@ public:
     }
 
     /// Simple event loop
-    void run() {
+    void run() const {
         while (!glfwWindowShouldClose(window_)) {
             glfwPollEvents();
-            // ← in future: record & submit ray-tracing commands here
+            // ← in the future: record & submit ray-tracing commands here
         }
     }
 

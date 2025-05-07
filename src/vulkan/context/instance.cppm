@@ -1,9 +1,6 @@
 module;
 
-#define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #include <vulkan/vulkan.hpp>
-VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
-
 #include <GLFW/glfw3.h>
 
 #include <vector>
@@ -14,6 +11,8 @@ VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 #include <iostream>
 
 export module vulkan.context.instance;
+
+import vulkan.dispatch;
 
 namespace vulkan::context {
 
@@ -116,7 +115,7 @@ inline Instance::Instance(std::string_view appName, const bool enableValidation)
     }
 
     // Application info
-    vk::ApplicationInfo appInfo {
+    const vk::ApplicationInfo appInfo {
         appName.data(),         // pApplicationName
         VK_MAKE_VERSION(1,0,0), // applicationVersion
         "NoEngine",             // pEngineName
@@ -140,6 +139,7 @@ inline Instance::Instance(std::string_view appName, const bool enableValidation)
 
     // Create the Vulkan instance
     instance_ = vk::createInstanceUnique(createInfo);
+    vulkan::dispatch::init_instance(instance_.get());
 
     // Set up debug messenger if needed
     if (enableValidation_) {
