@@ -12,6 +12,7 @@ module;
 
 export module vulkan.context.instance;
 
+import core.log;
 import vulkan.dispatch;
 
 namespace vulkan::context {
@@ -71,8 +72,12 @@ private:
                     return std::strcmp(prop.layerName, layer) == 0;
                 }
             );
-            if (!found) return false;
+            if (!found) {
+                core::log::debug("    ✖ validation layer '{}' not present", layer);
+                return false;
+            }
         }
+        core::log::debug("  ✓  all required validation layers present");
         return true;
     }
 
@@ -92,12 +97,18 @@ private:
 
     /// Callback invoked by the Vulkan validation layer
     static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(
-        vk::DebugUtilsMessageSeverityFlagBitsEXT      /*severity*/,
+        vk::DebugUtilsMessageSeverityFlagBitsEXT      severity,
         vk::DebugUtilsMessageTypeFlagsEXT             /*type*/,
         const vk::DebugUtilsMessengerCallbackDataEXT* data,
         void*                                         /*userData*/)
     {
-        std::println(std::cerr, "[VULKAN] {}", data->pMessage);
+        using S = vk::DebugUtilsMessageSeverityFlagBitsEXT;
+        if (severity & S::eError)
+            core::log::error("[VULKAN] {}", data->pMessage);
+        else if (severity & S::eWarning)
+            core::log::warn ("[VULKAN] {}", data->pMessage);
+        else
+            core::log::info ("[VULKAN] {}", data->pMessage);
         return VK_FALSE;
     }
 };
@@ -107,9 +118,13 @@ private:
 inline Instance::Instance(std::string_view appName, const bool enableValidation)
     : enableValidation_(enableValidation)
 {
+    core::log::info ("Creating Vulkan instance '{}'...", appName);
+
     // Verify validation layers if requested
     if (enableValidation_) {
+        core::log::debug("  Validation layers requested");
         if (const auto layers = getValidationLayers(); !checkValidationLayerSupport(layers)) {
+            core::log::error("Requested validation layers are unavailable");
             throw std::runtime_error("Validation layers requested but unavailable");
         }
     }
@@ -126,6 +141,7 @@ inline Instance::Instance(std::string_view appName, const bool enableValidation)
     // Instance creation
     const auto extensions = getRequiredExtensions(enableValidation_);
     const auto layers     = enableValidation_ ? getValidationLayers() : std::vector<const char*>{};
+    core::log::debug("  Using {} instance extension(s)", extensions.size());
 
     const vk::InstanceCreateInfo createInfo(
         {},                                       // InstanceCreateFlags
@@ -140,10 +156,12 @@ inline Instance::Instance(std::string_view appName, const bool enableValidation)
     // Create the Vulkan instance
     instance_ = vk::createInstanceUnique(createInfo);
     vulkan::dispatch::init_instance(instance_.get());
+    core::log::info ("Vulkan instance created");
 
     // Set up debug messenger if needed
     if (enableValidation_) {
         debugMessenger_ = createDebugMessenger(instance_.get());
+        core::log::debug("Debug messenger set up");
     }
 }
 

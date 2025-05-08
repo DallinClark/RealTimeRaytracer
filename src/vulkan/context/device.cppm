@@ -12,6 +12,7 @@ module;
 
 export module vulkan.context.device;
 
+import core.log;
 import vulkan.context.instance;
 import vulkan.dispatch;
 
@@ -66,16 +67,20 @@ private:
 
     // Check if this GPU supports all required extensions
     static bool checkExtensionSupport(const vk::PhysicalDevice pd) {
-        auto availible = pd.enumerateDeviceExtensionProperties();
+        auto available = pd.enumerateDeviceExtensionProperties();
         for (const auto required = requiredExtensions(); auto const* extension : required) {
             const bool found = std::ranges::any_of(
-                availible,
+                available,
                 [&](auto const& prop) {
                     return std::strcmp(prop.extensionName, extension)==0;
                 }
             );
-            if (!found) return false;
+            if (!found) {
+                core::log::debug("  ✖  missing extension '{}'", extension);
+                return false;
+            }
         }
+        core::log::debug("  ✓  all required extensions present");
         return true;
     }
 
@@ -113,21 +118,34 @@ private:
                                            const vk::SurfaceKHR surface)
     {
         const auto devices = instance.enumeratePhysicalDevices();
+        core::log::trace("Found {} Vulkan‑capable GPU(s)", devices.size());
         if (devices.empty())
             throw std::runtime_error("No Vulkan-capable GPUs found");
 
         for (auto const& device : devices) {
+            auto properties = device.getProperties();
+            core::log::debug("Evaluating GPU '{}'", properties.deviceName.data());
+
             if (!checkExtensionSupport(device)) continue;
-            if (auto qs = findQueueFamilies(device, surface); qs.complete()) return device;
+
+            if (auto q = findQueueFamilies(device, surface); q.complete()) {
+                core::log::info("Selected GPU '{}'", properties.deviceName.data());
+                return device;
+            }
+            core::log::debug("  ✖  required queue families not found");
         }
+        core::log::error("No suitable GPU met all requirements");
         throw std::runtime_error("Failed to find a GPU with required features");
     }
 };
 
-inline Device::Device(Instance& instance,
-                      vk::SurfaceKHR surface,
-                      bool /*enableValidation*/)
-{
+inline Device::Device(
+        Instance& instance,
+        vk::SurfaceKHR surface,
+        bool /*enableValidation*/
+) {
+    core::log::info("Creating logical device...");
+
     // Pick a suitable GPU
     physicalDevice_ = pickPhysical(instance.get(), surface);
 
@@ -135,6 +153,7 @@ inline Device::Device(Instance& instance,
     const auto [compute, present] = findQueueFamilies(physicalDevice_, surface);
     computeFamilyIdx_ = *compute;
     presentFamilyIdx_ = *present;
+    core::log::debug("Using queue families → compute: {}, present: {}", computeFamilyIdx_, presentFamilyIdx_);
 
     // Create unique queue-create infos (avoid duplicates)
     std::set uniqueFamilies = {
@@ -183,11 +202,13 @@ inline Device::Device(Instance& instance,
 
     // Create the logical device
     device_ = physicalDevice_.createDeviceUnique(info, nullptr);
-    vulkan::dispatch::init_device(device_.get());
+    dispatch::init_device(device_.get());
+    core::log::info("Logical device created");
 
     // Retrieve the queues
     computeQueue_ = device_->getQueue(computeFamilyIdx_, 0);
     presentQueue_ = device_->getQueue(presentFamilyIdx_, 0);
+    core::log::trace("Queues retrieved successfully");
 }
 
 } // namespace vulkan::context

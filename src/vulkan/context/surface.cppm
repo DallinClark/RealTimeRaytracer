@@ -5,9 +5,10 @@ module;
 #include <GLFW/glfw3.h>
 #include <stdexcept>
 
-import vulkan.context.instance;
-
 export module vulkan.context.surface;
+
+import core.log;
+import vulkan.context.instance;
 
 namespace vulkan::context {
 
@@ -19,6 +20,7 @@ namespace vulkan::context {
         explicit Surface(Instance& instance, GLFWwindow* window)
           : instance_(instance)
         {
+            core::log::info("Creating window surface");
             VkSurfaceKHR rawSurface = VK_NULL_HANDLE;
             if (glfwCreateWindowSurface(
                     instance_.get(),
@@ -27,6 +29,7 @@ namespace vulkan::context {
                     &rawSurface
                 ) != VK_SUCCESS)
             {
+                core::log::error("glfwCreateWindowSurface failed");
                 throw std::runtime_error("Failed to create Vulkan surface");
             }
 
@@ -36,6 +39,7 @@ namespace vulkan::context {
         /// Destroy the Vulkan surface on cleanup.
         ~Surface() {
             if (surface_ != VK_NULL_HANDLE) {
+                core::log::debug("Destroying surface {}", static_cast<void*>(surface_));
                 instance_.get().destroySurfaceKHR(surface_);
             }
         }

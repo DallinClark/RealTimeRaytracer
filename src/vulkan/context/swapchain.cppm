@@ -8,6 +8,7 @@ module;
 
 export module vulkan.context.swapchain;
 
+import core.log;
 import vulkan.context.instance;
 import vulkan.context.device;
 import vulkan.context.surface;
@@ -18,16 +19,25 @@ export class Swapchain {
 public:
     /// Create a swapchain for the given device/surface.
     /// desiredFormat & desiredPresentMode are hints; will fall back if unavailable.
-    Swapchain(const Device& device,
-              const Surface& surface,
-              const vk::Format desiredFormat          = vk::Format::eB8G8R8A8Unorm,
-              const vk::PresentModeKHR desiredPresent = vk::PresentModeKHR::eFifo)
-      : device_{ device.get() }
+    Swapchain(
+            const Device& device,
+            const Surface& surface,
+            const vk::Format desiredFormat          = vk::Format::eB8G8R8A8Unorm,
+            const vk::PresentModeKHR desiredPresent = vk::PresentModeKHR::eFifo
+    ) : device_{ device.get() }
       , physical_{ device.physical() }
       , surface_{ surface.get() }
     {
+        core::log::info("Creating swap-chain...");
         createSwapchain(desiredFormat, desiredPresent);
         retrieveImagesAndViews();
+        core::log::info(
+            "Swap-chain ready: {} image(s), {}×{} px, fmt {}",
+            images_.size(),
+            extent_.width,
+            extent_.height,
+            static_cast<int>(format_)
+        );
     }
 
     ~Swapchain() = default; // vk::UniqueSwapchainKHR & vk::UniqueImageView clean up
