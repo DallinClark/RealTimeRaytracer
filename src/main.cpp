@@ -1,8 +1,8 @@
 import app;
 
+#include <exception>
+#include <cstdio>
 #include <cstdlib>
-#include <iostream>
-#include <print>
 
 int main() {
     try {
@@ -10,7 +10,7 @@ int main() {
         application.run();
     }
     catch (const std::exception& e) {
-        std::println(std::cerr, "Fatal: {}", e.what());
+        std::fprintf(stderr, "Fatal: %s\n", e.what());
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;
