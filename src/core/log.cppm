@@ -29,7 +29,7 @@ enum class Level : std::uint8_t { trace, debug, info, warn, error, critical, off
 #ifndef LOG_LEVEL
     inline constexpr auto compile_time_level = Level::info;
 #else
-    inline constexpr auto compile_time_level = static_cast<Level>(ATTO_LOG_LEVEL);
+    inline constexpr auto compile_time_level = static_cast<Level>(LOG_LEVEL);
 #endif
 
 // ────── output sink (replace with file possible) ──────
@@ -44,17 +44,13 @@ constexpr void log(
 ) {
     if constexpr (level < compile_time_level) return;   // fully removed at compile time if unneeded
 
-    const std::source_location  loc = std::source_location::current();
-
     using clock = std::chrono::steady_clock;
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(clock::now().time_since_epoch()).count();
 
     auto header = std::format(
-            "[{:>10} ms] [{:^7}] {:>20}:{:<3} ",
+            "[{:>10} ms] [{:^7}] ",
             ms,
-            to_string(level),
-            loc.file_name(),
-            loc.line()
+            to_string(level)
     );
 
     auto body = std::format(fmt, std::forward<Args>(args)...);
