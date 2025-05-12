@@ -17,4 +17,7 @@ Next, open the project in the IDE of your choice and enable the config presets f
 For example, in CLion, go to `File -> Settings -> Build, Execution, Deployment -> CMake` and check the box for 
 `Enable CMake Presets` on `llvm-local-debug` and `llvm-local-release`. Then, click `Apply` and `OK`.
 
+Now, you need to set the path to the Vulkan SDK validation layers in the environment variable `VK_LAYER_PATH`. 
+In CLion, go to `Run -> Edit Configurations -> Environment Variables` and add `VK_LAYER_PATH=PATH_TOHOME/tools/vulkan/1.4.309.0/x86_64/share/vulkan/explicit_layer.d`
+
 Finally, run the project using the `llvm-local-debug` or `llvm-local-release` configuration.
