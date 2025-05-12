@@ -61,7 +61,8 @@ private:
             VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
             VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
             VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
-            VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME
+            VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
+            VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME
         };
     }
 
@@ -175,9 +176,15 @@ inline Device::Device(
     vk::PhysicalDeviceBufferDeviceAddressFeatures bufferFeatures {};
     bufferFeatures.bufferDeviceAddress = VK_TRUE;
 
+    // Allows for descriptor indexing in shaders, might not be needed
+    vk::PhysicalDeviceDescriptorIndexingFeatures descriptorIndexingFeatures{};
+    descriptorIndexingFeatures.descriptorBindingPartiallyBound          = VK_TRUE;
+    descriptorIndexingFeatures.runtimeDescriptorArray                   = VK_TRUE;
+    descriptorIndexingFeatures.pNext                                    = &bufferFeatures;
+
     vk::PhysicalDeviceAccelerationStructureFeaturesKHR accelFeatures {};
     accelFeatures.accelerationStructure = VK_TRUE;
-    accelFeatures.pNext                 = &bufferFeatures;
+    accelFeatures.pNext                 = &descriptorIndexingFeatures;
 
     vk::PhysicalDeviceRayTracingPipelineFeaturesKHR rtFeatures {};
     rtFeatures.rayTracingPipeline = VK_TRUE;

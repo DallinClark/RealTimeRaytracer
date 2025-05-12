@@ -73,11 +73,11 @@ private:
                 }
             );
             if (!found) {
-                core::log::debug("    ✖ validation layer '{}' not present", layer);
+                core::log::debug("validation layer '{}' not present", layer);
                 return false;
             }
         }
-        core::log::debug("  ✓  all required validation layers present");
+        core::log::debug("all required validation layers present");
         return true;
     }
 

@@ -49,7 +49,7 @@ public:
     [[nodiscard]] const auto&       images()      const noexcept { return images_; }
     [[nodiscard]] const auto&       imageViews()  const noexcept { return imageViews_; }
 
-    /// Recreate swapchain (e.g. on window resize). Destroys old swapchain & views.
+    /// Recreate swapchain (e.g. on window resize). Destroys old swapchain & views. TODO: fix this
     void recreate(const vk::Format desiredFormat = vk::Format::eB8G8R8A8Unorm,
                   const vk::PresentModeKHR desiredPresent = vk::PresentModeKHR::eFifo)
     {
@@ -63,6 +63,17 @@ public:
         createSwapchain(desiredFormat, desiredPresent);
         retrieveImagesAndViews();
     }
+
+    /* Gets the next image to draw to
+     We might want to switch this to giving a framebuffer, and switch to using a fence instead of a semaphore */
+    [[nodiscard]] vk::ImageView acquireNextImage(const vk::UniqueSemaphore& imageAcquiredSemaphore) {
+        vk::ResultValue<uint32_t> currentBuffer = device_.acquireNextImageKHR(
+                swapchain_.get(), UINT64_MAX, imageAcquiredSemaphore.get(), nullptr /* no fence */);
+        assert( currentBuffer.result == vk::Result::eSuccess );
+
+        return imageViews_[currentBuffer.value].get();
+    }
+
 
 private:
     // Vulkan handles
