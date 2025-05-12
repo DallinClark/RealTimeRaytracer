@@ -81,7 +81,7 @@ inline Buffer::Buffer(
         const vk::BufferUsageFlags    usage,
         const vk::MemoryPropertyFlags properties
 ) : device_{device.get()}, physical_{device.physical()}, allocationSize_(size), properties_ {properties} {
-    core::log::debug("Buffer: Constructing (size={}, usage={}, properties={})", size, usage, properties);
+    core::log::debug("Buffer: Constructing (size={}, usage={}, properties={})", size, to_string(usage), to_string(properties));
 
     // Create the buffer handle
     const vk::BufferCreateInfo bufferInfo{
@@ -115,7 +115,7 @@ inline uint32_t Buffer::findMemoryType(
         const vk::MemoryPropertyFlags properties,
         const vk::PhysicalDevice      physical
 ) {
-    core::log::trace("Buffer: Searching for memory type (typeFilter={:#x}, properties={:#x})", typeFilter, properties);
+    core::log::trace("Buffer: Searching for memory type (typeFilter={:#x}, properties={})", typeFilter, to_string(properties));
 
     const auto memProps = physical.getMemoryProperties();
     for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
