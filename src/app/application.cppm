@@ -1,6 +1,7 @@
 module;
 
 #include <vulkan/vulkan.hpp>
+#include <glm/glm.hpp>
 
 #include <GLFW/glfw3.h>
 #include <iostream>
@@ -16,6 +17,8 @@ import vulkan.context.device;
 import vulkan.context.surface;
 import vulkan.context.swapchain;
 import vulkan.dispatch;
+
+import scene.camera;
 
 export namespace app {
 
@@ -75,6 +78,15 @@ public:
     /// Simple event loop
     void run() const {
         core::log::info("Entering main loop");
+        glm::vec3 cameraPosition{ 0.0f,0.0f,1.0f };
+        glm::vec3   cameraLookAt{ 0.0f,0.0f,0.0f };
+        glm::vec3       cameraUp{ 0.0f,1.0f,0.0f };
+        float fovY = 90;
+        int pixelWidth  = 800;
+        int pixelHeight = 600;
+
+        scene::Camera(*device_, fovY, cameraPosition, cameraLookAt, cameraUp, pixelWidth, pixelHeight);
+
         while (!glfwWindowShouldClose(window_)) {
             glfwPollEvents();
             // in the future: record & submit ray-tracing commands here

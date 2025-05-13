@@ -2,23 +2,30 @@ module;
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <vulkan/vulkan.hpp>
 
-export module Camera;
+#include <memory>
+
+import vulkan.memory.buffer;
+import vulkan.context.device;
+
+export module scene.camera;
 
 namespace scene {
 
-/* Holds camera info and data for the GPU
-  TODO change projection for vulkan style instead of OpenGL */
+/* Holds camera info and data for the GPU */
 
 export class Camera {
 public:
     struct GPUCameraData{
-        glm::mat4 view;
-        glm::mat4 proj;
-        glm::mat4 viewproj;
+        glm::vec3 position;
+        glm::vec3 topLeftViewportCorner;
+        glm::vec3 horizontalViewportDelta;
+        glm::vec3 verticalViewportDelta;
     };
 
-    Camera(glm::vec3 position, glm::vec3 lookAt, float fovY, float viewportWidth, float viewportHeight, float nearClip, float farClip);
+    Camera(const vulkan::context::Device& device, float fovY, glm::vec3 position, glm::vec3 lookAt,
+           glm::vec3 upVector, int pixelWidth, int pixelHeight);
 
     [[nodiscard]] GPUCameraData getGPUData();
     [[nodiscard]] glm::vec3     getPosition() { return position_; }
@@ -34,26 +41,34 @@ public:
     }
 
 private:
+    void updateGPUData();
+
     bool          GPUDataNeedsUpdate_;
     GPUCameraData GPUData_{};
 
-    glm::vec3     position_;
-    glm::vec3     lookAtPoint_;
+    glm::vec3 position_;
+    glm::vec3 lookAtPoint_;
+    glm::vec3 upVector_;
+    float     fovY_;
+    int       pixelWidth_;
+    int       pixelHeight_;
 
-    float         fovY_;
-    float         width_;
-    float         height_;
-    float         nearClip_;
-    float         farClip_;
+    const vulkan::context::Device& device_;
+    vulkan::memory::Buffer buffer_;
 
-    void updateGPUData();
 };
 
-Camera::Camera(glm::vec3 position, glm::vec3 lookAt, float fovY, float viewportWidth, float viewportHeight, float nearClip, float farClip)
-        : position_(position), lookAtPoint_(lookAt), fovY_(fovY), width_(viewportWidth), height_(viewportHeight), nearClip_(nearClip), farClip_(farClip) {
-
+Camera::Camera(const vulkan::context::Device& device, float fovY, glm::vec3 position, glm::vec3 lookAt, glm::vec3 upVector, int pixelWidth, int pixelHeight)
+           : device_(device), fovY_(fovY), position_(position), lookAtPoint_(lookAt),
+           pixelWidth_(pixelWidth), pixelHeight_(pixelHeight), upVector_(upVector),
+           buffer_(
+                   device,
+                   sizeof(GPUCameraData),
+                   vk::BufferUsageFlagBits::eUniformBuffer,
+                   vk::MemoryPropertyFlagBits::eHostVisible
+                   | vk::MemoryPropertyFlagBits::eHostCoherent ),
+           GPUDataNeedsUpdate_(true) {
     updateGPUData();
-    GPUDataNeedsUpdate_ = false;
 }
 
 Camera::GPUCameraData Camera::getGPUData() {
@@ -64,14 +79,24 @@ Camera::GPUCameraData Camera::getGPUData() {
 }
 
 void Camera::updateGPUData() {
-    glm::mat4 view = glm::lookAt(position_, lookAtPoint_, glm::vec3(0.0,1.0,0.0));
+    if (GPUDataNeedsUpdate_) {
+        float aspect      = float(pixelWidth_) / float(pixelHeight_);
+        float theta       = glm::radians(fovY_);
+        float halfHeight  = std::tan(theta * 0.5f);
+        float halfWidth   = aspect * halfHeight;
 
-    float aspect = width_ / height_;
-    glm::mat4 proj = glm::perspective(fovY_, aspect, nearClip_, farClip_);
+        glm::vec3 w = glm::normalize(position_ - lookAtPoint_);  // forward vector
+        glm::vec3 u = glm::normalize(glm::cross(upVector_, w));  // right in world space
+        glm::vec3 v = glm::cross(w, u);                          // camera's true up
 
-    glm::mat4 viewproj = proj * view;
+        GPUData_.position                = position_;
+        GPUData_.horizontalViewportDelta = (2.0f * halfWidth * u) / float(pixelWidth_);
+        GPUData_.verticalViewportDelta   = -(2.0f * halfHeight * v) / float(pixelHeight_);
+        GPUData_.topLeftViewportCorner   = position_ - (halfWidth * u) - (halfHeight * v) - w;
 
-    GPUData_ = GPUCameraData(view, proj, viewproj);
-    GPUDataNeedsUpdate_ = false;
+        // Upload straight to GPU buffer
+        buffer_.fill(&GPUData_, sizeof(GPUData_), 0);
+        GPUDataNeedsUpdate_ = false;
+    }
 }
 }

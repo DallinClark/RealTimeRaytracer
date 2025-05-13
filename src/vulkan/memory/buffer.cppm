@@ -123,7 +123,7 @@ inline uint32_t Buffer::findMemoryType(
     for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
         if (
             const auto& type = memProps.memoryTypes[i];
-            typeFilter & 1u << i && (type.propertyFlags & properties) == properties
+            (typeFilter & (1u << i)) && (type.propertyFlags & properties) == properties
         ) {
             core::log::trace("Buffer: Selected memory type index {}", i);
             return i;
