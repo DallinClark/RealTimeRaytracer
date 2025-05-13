@@ -65,7 +65,7 @@ namespace vulkan::context {
         }
 
         /* Gets the next image to draw to
-         We might want to switch this to giving a framebuffer, and switch to using a fence instead of a semaphore */
+         We might want to switch this to be giving a framebuffer, and switch to using a fence instead of a semaphore */
         [[nodiscard]] vk::ImageView acquireNextImage(const vk::UniqueSemaphore& imageAcquiredSemaphore) {
             vk::ResultValue<uint32_t> currentBuffer = device_.acquireNextImageKHR(
                     swapchain_.get(), UINT64_MAX, imageAcquiredSemaphore.get(), nullptr /* no fence */);

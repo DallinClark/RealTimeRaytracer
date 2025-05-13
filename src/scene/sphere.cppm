@@ -3,7 +3,7 @@ module;
 #include <format>
 #include <glm/vec3.hpp>
 
-export module Sphere;
+export module scene.sphere;
 
 export struct Sphere {
     glm::vec3 center {0.0, 0.0, 0.0};

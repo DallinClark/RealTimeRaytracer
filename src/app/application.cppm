@@ -77,7 +77,7 @@ public:
         core::log::info("Entering main loop");
         while (!glfwWindowShouldClose(window_)) {
             glfwPollEvents();
-            // ← in the future: record & submit ray-tracing commands here
+            // in the future: record & submit ray-tracing commands here
         }
         core::log::info("Main loop exited");
     }

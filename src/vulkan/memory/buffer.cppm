@@ -12,6 +12,8 @@ namespace vulkan::memory {
 /// Simple RAII wrapper for a Vulkan buffer + its device memory.
 /// Supports creation, mapping, and filling from host.
 /// Designed for clarity and flexibility (staging, uniform, or device-local).
+
+// TODO can't use texel buffers yet becuase of no buffer views
 export class Buffer {
 public:
 
