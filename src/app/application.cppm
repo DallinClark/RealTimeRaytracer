@@ -17,6 +17,8 @@ import vulkan.context.device;
 import vulkan.context.surface;
 import vulkan.context.swapchain;
 import vulkan.dispatch;
+import vulkan.memory.descriptor_pool;
+import vulkan.memory.descriptor_set_layout;
 
 import scene.camera;
 
@@ -77,6 +79,7 @@ public:
 
     /// Simple event loop
     void run() const {
+        /* JUST FOR TESTING */
         core::log::info("Entering main loop");
         glm::vec3 cameraPosition{ 0.0f,0.0f,1.0f };
         glm::vec3   cameraLookAt{ 0.0f,0.0f,0.0f };
@@ -85,7 +88,19 @@ public:
         int pixelWidth  = 800;
         int pixelHeight = 600;
 
-        scene::Camera(*device_, fovY, cameraPosition, cameraLookAt, cameraUp, pixelWidth, pixelHeight);
+        scene::Camera camera(*device_, fovY, cameraPosition, cameraLookAt, cameraUp, pixelWidth, pixelHeight);
+        vk::Buffer cameraBuffer = camera.getBuffer();
+
+        vulkan::memory::DescriptorSetLayout cameraLayout(device_->get());
+        cameraLayout.addBinding(0, vk::DescriptorType::eUniformBuffer,  vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR);
+        cameraLayout.build();
+
+        // We need this to happen automatically based off of needs
+        std::vector<vk::DescriptorPoolSize> poolSizes = {
+                {vk::DescriptorType::eUniformBuffer, 1}
+        };
+
+        vulkan::memory::DescriptorPool pool(device_->get(), poolSizes, 1);
 
         while (!glfwWindowShouldClose(window_)) {
             glfwPollEvents();

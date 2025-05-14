@@ -6,7 +6,7 @@ export module vulkan.memory.descriptor_pool;
 
 import core.log;
 import vulkan.context.device;
-import vulkan.memory.descriptor_set;
+import vulkan.memory.descriptor_set_layout;
 
 namespace vulkan::memory {
 
@@ -22,46 +22,58 @@ public:
 
     /// Allocate descriptor sets following the provided layouts.
     /// Returns a vector of handles; throws on failure.
-    std::vector<vk::DescriptorSet> allocate(const std::vector<DescriptorSet>& layouts) const;
+    void allocate(const std::vector<DescriptorSetLayout>& layouts);
 
     /// Reset the pool, freeing all allocated sets. Next alloc reuses space.
-    void reset(vk::DescriptorPoolResetFlags flags = {}) const {
+    void reset(vk::DescriptorPoolResetFlags flags = {}) noexcept {
         device_.resetDescriptorPool(pool_.get(), flags);
     }
 
-    /// Access the raw VkDescriptorPool handle
     vk::DescriptorPool get() const noexcept { return pool_.get(); }
+    std::vector<vk::DescriptorSet> getSets() const noexcept { return descriptorSets_; }
 
 private:
     vk::Device                            device_;
     vk::UniqueDescriptorPool              pool_;
+    std::vector<vk::DescriptorSet>        descriptorSets_;
 };
 
+
 DescriptorPool::DescriptorPool(
-    vk::Device device,
-    const std::vector<vk::DescriptorPoolSize>& poolSizes,
-    uint32_t maxSets) : device_(device) {
+        vk::Device device,
+        const std::vector<vk::DescriptorPoolSize>& poolSizes,
+        uint32_t maxSets) : device_(device) {
 
     vk::DescriptorPoolCreateInfo info(
-        {},
-        maxSets,
-        static_cast<uint32_t>(poolSizes.size()),
-        poolSizes.data()
+            {},
+            maxSets,
+            static_cast<uint32_t>(poolSizes.size()),
+            poolSizes.data()
     );
+
     pool_ = device_.createDescriptorPoolUnique(info);
+    if (!pool_) {
+        throw std::runtime_error("Failed to create descriptor pool");
+    }
 }
 
-std::vector<vk::DescriptorSet> DescriptorPool::allocate(const std::vector<DescriptorSet>& sets) const {
-    std::vector<vk::DescriptorSetLayout> layouts;
-    layouts.reserve(sets.size());
-    for (const auto& set : sets) {
-        layouts.push_back(set.getLayout());
+void DescriptorPool::allocate(const std::vector<DescriptorSetLayout>& layouts) {
+    std::vector<vk::DescriptorSetLayout> vulkanLayouts;
+    for (auto& layout : layouts) {
+        vulkanLayouts.push_back(layout.get());
     }
+
     vk::DescriptorSetAllocateInfo allocInfo(
             pool_.get(),
-            static_cast<uint32_t>(layouts.size()),
-            layouts.data()
+            static_cast<uint32_t>(vulkanLayouts.size()),
+            vulkanLayouts.data()
     );
-    return device_.allocateDescriptorSets(allocInfo);
+
+    try {
+        descriptorSets_ = device_.allocateDescriptorSets(allocInfo);
+    } catch (const std::exception& e) {
+        throw std::runtime_error("Failed to allocate descriptor sets: " + std::string(e.what()));
+    }
 }
+
 } // namespace vulkan

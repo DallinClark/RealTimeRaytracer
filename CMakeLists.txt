@@ -91,7 +91,7 @@ endif()
 add_executable(${PROJECT_NAME}
         src/main.cpp
         src/app/window.cppm
-        src/vulkan/memory/descriptor_set.cppm
+        src/vulkan/memory/descriptor_set_layout.cppm
         src/vulkan/memory/descriptor_pool.cppm
         src/scene/camera.cppm
 )

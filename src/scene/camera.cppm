@@ -28,6 +28,7 @@ public:
            glm::vec3 upVector, int pixelWidth, int pixelHeight);
 
     [[nodiscard]] GPUCameraData getGPUData();
+    [[nodiscard]] vk::Buffer    getBuffer()   { return buffer_.get(); }
     [[nodiscard]] glm::vec3     getPosition() { return position_; }
     [[nodiscard]] glm::vec3     getLookAt()   { return lookAtPoint_; }
 
@@ -55,7 +56,6 @@ private:
 
     const vulkan::context::Device& device_;
     vulkan::memory::Buffer buffer_;
-
 };
 
 Camera::Camera(const vulkan::context::Device& device, float fovY, glm::vec3 position, glm::vec3 lookAt, glm::vec3 upVector, int pixelWidth, int pixelHeight)
@@ -94,7 +94,7 @@ void Camera::updateGPUData() {
         GPUData_.verticalViewportDelta   = -(2.0f * halfHeight * v) / float(pixelHeight_);
         GPUData_.topLeftViewportCorner   = position_ - (halfWidth * u) - (halfHeight * v) - w;
 
-        // Upload straight to GPU buffer
+        // Upload straight to buffer
         buffer_.fill(&GPUData_, sizeof(GPUData_), 0);
         GPUDataNeedsUpdate_ = false;
     }
