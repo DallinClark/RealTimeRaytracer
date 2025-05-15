@@ -94,6 +94,9 @@ add_executable(${PROJECT_NAME}
         src/vulkan/memory/descriptor_set_layout.cppm
         src/vulkan/memory/descriptor_pool.cppm
         src/scene/camera.cppm
+        src/vulkan/context/command_buffer.cppm
+        src/scene/geometry/triangle.cppm
+        src/scene/geometry/vertex.cppm
 )
 
 # --- MODULE SUPPORT -----------------------------------------

@@ -55,7 +55,7 @@ private:
     int       pixelHeight_;
 
     const vulkan::context::Device& device_;
-    vulkan::memory::Buffer buffer_;
+    vulkan::memory::Buffer         buffer_;
 };
 
 Camera::Camera(const vulkan::context::Device& device, float fovY, glm::vec3 position, glm::vec3 lookAt, glm::vec3 upVector, int pixelWidth, int pixelHeight)

@@ -21,6 +21,9 @@ import vulkan.memory.descriptor_pool;
 import vulkan.memory.descriptor_set_layout;
 
 import scene.camera;
+import scene.geometry.vertex;
+import scene.geometry.triangle;
+#include <vulkan/vulkan_enums.hpp>
 
 export namespace app {
 
@@ -79,8 +82,11 @@ public:
 
     /// Simple event loop
     void run() const {
-        /* JUST FOR TESTING */
         core::log::info("Entering main loop");
+
+        /* JUST FOR TESTING */
+        std::vector<vulkan::memory::DescriptorSetLayout> layouts;
+        // Create the camera
         glm::vec3 cameraPosition{ 0.0f,0.0f,1.0f };
         glm::vec3   cameraLookAt{ 0.0f,0.0f,0.0f };
         glm::vec3       cameraUp{ 0.0f,1.0f,0.0f };
@@ -91,16 +97,29 @@ public:
         scene::Camera camera(*device_, fovY, cameraPosition, cameraLookAt, cameraUp, pixelWidth, pixelHeight);
         vk::Buffer cameraBuffer = camera.getBuffer();
 
-        vulkan::memory::DescriptorSetLayout cameraLayout(device_->get());
-        cameraLayout.addBinding(0, vk::DescriptorType::eUniformBuffer,  vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR);
-        cameraLayout.build();
+        layouts.emplace_back(device_->get());
+        layouts.back().addBinding(0, vk::DescriptorType::eUniformBuffer,  vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR);
+        layouts.back().build();
+
+        // Create a triangle
+        scene::geometry::Vertex v0{glm::vec3{ -0.5f, -0.5f, -0.5f }};
+        scene::geometry::Vertex v1{glm::vec3{  0.5f, -0.5f, -0.5f }};
+        scene::geometry::Vertex v2{glm::vec3{  0.0f,  0.5f, -0.5f }};
+
+        scene::geometry::Triangle triangle(*device_, v0, v1, v2);
+
+        layouts.emplace_back(device_->get());
+        layouts.back().addBinding(1, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR);
+        layouts.back().build();
 
         // We need this to happen automatically based off of needs
         std::vector<vk::DescriptorPoolSize> poolSizes = {
+                {vk::DescriptorType::eStorageBuffer, 1},
                 {vk::DescriptorType::eUniformBuffer, 1}
         };
 
-        vulkan::memory::DescriptorPool pool(device_->get(), poolSizes, 1);
+        vulkan::memory::DescriptorPool pool(device_->get(), poolSizes, 2);
+        pool.allocate(layouts);
 
         while (!glfwWindowShouldClose(window_)) {
             glfwPollEvents();
