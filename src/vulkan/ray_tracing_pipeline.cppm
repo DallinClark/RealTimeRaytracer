@@ -1,13 +1,22 @@
-// module;
-// #include <vector>
-// #include <string>
-// #include <fstream>
-// #include <iterator>
-// #include <stdexcept>
-//
-// #define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
-// #include <vulkan/vulkan.hpp>
+module;
+#include <vector>
+#include <string>
+#include <fstream>
+#include <iterator>
+#include <stdexcept>
+#include <vulkan/vulkan.hpp>
+
+#define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 export module RayTracingPipeline;
+
+import VulkanContext;
+export namespace vulkan {
+    class RayTracingPipeline {
+    public:
+        vk::UniquePipelineLayout pipelineLayout;
+
+    };
+}
 //
 // import VulkanContext;
 //
