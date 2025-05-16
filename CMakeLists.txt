@@ -90,6 +90,13 @@ endif()
 # ----------------------------------------------------------------------------
 add_executable(${PROJECT_NAME}
         src/main.cpp
+        src/app/window.cppm
+        src/vulkan/memory/descriptor_set_layout.cppm
+        src/vulkan/memory/descriptor_pool.cppm
+        src/scene/camera.cppm
+        src/vulkan/context/command_buffer.cppm
+        src/scene/geometry/triangle.cppm
+        src/scene/geometry/vertex.cppm
 )
 
 # --- MODULE SUPPORT -----------------------------------------
@@ -118,4 +125,9 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
         Vulkan::Vulkan
         glfw
         glm::glm
+)
+
+target_compile_definitions(RealTimeRaytracer
+        PRIVATE
+        VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1   # tell every TU to use the dynamic dispatcher
 )
