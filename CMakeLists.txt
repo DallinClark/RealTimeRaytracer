@@ -86,6 +86,58 @@ if (NOT TARGET glm::glm)
 endif()
 
 # ----------------------------------------------------------------------------
+# Convert GLSL files to SPIR-V
+# ----------------------------------------------------------------------------
+# bind glslc program
+set(GLSLC_EXECUTABLE "${VULKAN_SDK_ROOT}/bin/glslc")
+message(STATUS "Using glslc: ${GLSLC_EXECUTABLE}")
+
+
+# Set shader source and build paths
+set(SHADER_SRC_DIR ${CMAKE_SOURCE_DIR}/src/shaders)
+set(SHADER_BIN_DIR ${SHADER_SRC_DIR}/spv)
+file(MAKE_DIRECTORY ${SHADER_BIN_DIR})
+
+file(GLOB_RECURSE GLSL_SHADERS
+        ${SHADER_SRC_DIR}/*.rgen
+        ${SHADER_SRC_DIR}/*.rchit
+        ${SHADER_SRC_DIR}/*.rmiss
+        ${SHADER_SRC_DIR}/*.rint
+)
+
+message(STATUS "Found shaders:")
+foreach(s IN LISTS GLSL_SHADERS)
+    message(STATUS "  ${s}")
+endforeach()
+
+set(SPV_SHADERS "")
+
+foreach(SHADER ${GLSL_SHADERS})
+    get_filename_component(FILE_NAME ${SHADER} NAME)
+    set(SPV ${SHADER_BIN_DIR}/${FILE_NAME}.spv)
+    message(STATUS "Compiling ${SPV}" ...)
+    add_custom_command(
+            OUTPUT ${SPV}
+            COMMAND ${CMAKE_COMMAND} -E echo "Compiling ${FILE_NAME} as stage ${STAGE_FLAG}..."
+            COMMAND ${GLSLC_EXECUTABLE}
+                    -fshader-stage=${STAGE_FLAG}
+                    --target-env=vulkan1.3
+                    -o ${SPV} ${SHADER}
+            DEPENDS ${SHADER}
+            COMMENT "Compiling ${FILE_NAME} to SPIR-V with stage ${STAGE_FLAG}"
+            VERBATIM
+    )
+
+    add_custom_target(
+            compile_${FILE_NAME}_spv ALL
+            DEPENDS ${SPV}
+    )
+
+    list(APPEND SPV_SHADERS compile_${FILE_NAME}_spv)
+endforeach()
+
+
+# ----------------------------------------------------------------------------
 # Main executable
 # ----------------------------------------------------------------------------
 add_executable(${PROJECT_NAME}
@@ -131,3 +183,9 @@ target_compile_definitions(RealTimeRaytracer
         PRIVATE
         VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1   # tell every TU to use the dynamic dispatcher
 )
+
+# Now create one umbrella target that depends on all
+add_custom_target(CompileShaders ALL DEPENDS ${SPV_SHADERS})
+
+# Make sure your main executable depends on CompileShaders
+add_dependencies(${PROJECT_NAME} CompileShaders)
