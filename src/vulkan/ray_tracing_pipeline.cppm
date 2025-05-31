@@ -4,32 +4,45 @@ module;
 #include <fstream>
 #include <vulkan/vulkan.hpp>
 
-import core.file;
-
 export module vulkan.ray_tracing_pipeline;
-namespace vulkan::context {
+
+import core.file;
+import core.log;
+import vulkan.context.device;
+import vulkan.context.command_pool;
+
+namespace vulkan {
 
     export class RayTracingPipeline {
     public:
-        RayTracingPipeline(const Device& device);
+        RayTracingPipeline(const context::Device &device, std::vector<vk::DescriptorSetLayout> &descriptorSetLayouts,
+                           std::string_view rgenPath, std::string_view rmissPath,
+                           std::string_view rchitPath);
 
-        void loadShaders(std::string_view rgen, std::string_view rmiss, std::string_view rchit);
+        void createShaderModules(std::string_view rgen, std::string_view rmiss, std::string_view rchit);
+
+        void createShaderGroups();
+
         void createPipelineLayout();
+
         void createPipeline();
-        void createShaderBindingTable();
-        void recordTraceRays(const CommandBuffer& cmdBuf, vk::Extent2D extent);
-        vk::UniquePipeline createRayTracingPipeline(const Device& device,
-                                                    vk::PipelineCache pipelineCache,
-                                                    const vk::RayTracingPipelineCreateInfoKHR& createInfo,
-                                                    const vk::AllocationCallbacks* allocator = nullptr);
+        //        void createShaderBindingTable();
+        //        void recordTraceRays(const CommandBuffer& cmdBuf, vk::Extent2D extent);
+        //        vk::UniquePipeline createRayTracingPipeline(const vk::Device& device,
+        //                                                    vk::PipelineCache pipelineCache,
+        //                                                    const vk::RayTracingPipelineCreateInfoKHR& createInfo,
+        //                                                    const vk::AllocationCallbacks* allocator = nullptr);
 
         [[nodiscard]] vk::Pipeline get() const noexcept { return pipeline_.get(); }
 
     private:
-        const Device& device_;
+        const context::Device &device_;
+        std::vector<vk::DescriptorSetLayout> descriptorSetLayouts_;
 
         // Shader modules
         vk::UniqueShaderModule rgen_, rmiss_, rchit_;
+        std::vector<vk::RayTracingShaderGroupCreateInfoKHR> shaderGroups_;
+        std::vector<vk::PipelineShaderStageCreateInfo> shaderStages_;
 
         // Pipeline
         vk::UniquePipelineLayout pipelineLayout_;
@@ -43,96 +56,108 @@ namespace vulkan::context {
         vk::PhysicalDeviceRayTracingPipelinePropertiesKHR rtProps_{};
 
         // Internal utils
-        vk::UniqueShaderModule createShaderModule(std::string_view path);
-        void queryRayTracingProperties();
+        inline vk::UniqueShaderModule createShaderModule(std::string_view path);
+        //void queryRayTracingProperties();
     };
 
-    // Implemented functions
-    inline RayTracingPipeline::RayTracingPipeline(const Device& device)
-            : device_(device) {
-        queryRayTracingProperties();
+
+    RayTracingPipeline::RayTracingPipeline(const context::Device &device,
+                                           std::vector<vk::DescriptorSetLayout> &descriptorSetLayouts,
+                                           std::string_view rgenPath, std::string_view rmissPath,
+                                           std::string_view rchitPath) : device_{device},
+                                                                         descriptorSetLayouts_(descriptorSetLayouts) {
+        createShaderModules(rgenPath, rmissPath, rchitPath);
+        createShaderGroups();
+        createPipelineLayout();
+        createPipeline();
     }
 
-    inline void RayTracingPipeline::queryRayTracingProperties() {
-        rtProps_.sType = vk::StructureType::ePhysicalDeviceRayTracingPipelinePropertiesKHR;
-        vk::PhysicalDeviceProperties2 props2{};
-        props2.sType = vk::StructureType::ePhysicalDeviceProperties2;
-        props2.pNext = &rtProps_;
-        device_.physical().getProperties2(&props2);
-        core::log::debug("RT Shader Group Handle Size: {}", rtProps_.shaderGroupHandleSize);
-    }
-
-    inline void RayTracingPipeline::loadShaders(std::string_view rgen, std::string_view rmiss, std::string_view rchit) {
+    void
+    RayTracingPipeline::createShaderModules(std::string_view rgen, std::string_view rmiss, std::string_view rchit) {
         rgen_ = createShaderModule(rgen);
         rmiss_ = createShaderModule(rmiss);
         rchit_ = createShaderModule(rchit);
     }
 
-    inline vk::UniqueShaderModule RayTracingPipeline::createShaderModule(std::string_view path) {
+    vk::UniqueShaderModule RayTracingPipeline::createShaderModule(std::string_view path) {
         // Load SPIR-V shader file into vector<char>
-        // You’ll need your own file utility here
-        std::vector<char> code = core::loadBinaryFile(path); // <-- implement this
-        vk::ShaderModuleCreateInfo info{
+        std::vector<char> code = core::file::loadBinaryFile(path);
+        vk::ShaderModuleCreateInfo createInfo{
                 {}, code.size(),
-                reinterpret_cast<const uint32_t*>(code.data())
+                reinterpret_cast<const uint32_t *>(code.data())
         };
-        return createShaderModuleUnique(info);
+        return device_.get().createShaderModuleUnique(createInfo);
     }
-    inline void RayTracingPipeline::createPipelineLayout() {
+
+    void RayTracingPipeline::createShaderGroups() {
+        // different stages in the pipeline, linked to the groups
+        shaderStages_ = {
+                {{}, vk::ShaderStageFlagBits::eRaygenKHR,     rgen_.get(),  "main"},
+                {{}, vk::ShaderStageFlagBits::eMissKHR,       rmiss_.get(), "main"},
+                {{}, vk::ShaderStageFlagBits::eClosestHitKHR, rchit_.get(), "main"}
+        };
+        shaderGroups_ = {
+                {vk::RayTracingShaderGroupTypeKHR::eGeneral,           0,                    VK_SHADER_UNUSED_KHR, VK_SHADER_UNUSED_KHR, VK_SHADER_UNUSED_KHR},
+                {vk::RayTracingShaderGroupTypeKHR::eGeneral,           1,                    VK_SHADER_UNUSED_KHR, VK_SHADER_UNUSED_KHR, VK_SHADER_UNUSED_KHR},
+                {vk::RayTracingShaderGroupTypeKHR::eTrianglesHitGroup, VK_SHADER_UNUSED_KHR, 2,                    VK_SHADER_UNUSED_KHR, VK_SHADER_UNUSED_KHR}
+        };
+    }
+
+    void RayTracingPipeline::createPipelineLayout() {
         vk::PipelineLayoutCreateInfo layoutInfo{};
-        pipelineLayout_ = device_.createPipelineLayoutUnique(layoutInfo);
+        layoutInfo.setLayoutCount = descriptorSetLayouts_.size();
+        layoutInfo.pSetLayouts = &descriptorSetLayouts_[0];
+        pipelineLayout_ = device_.get().createPipelineLayoutUnique(layoutInfo);
     }
 
-    inline vk::UniquePipeline RayTracingPipeline::createRayTracingPipelineKHRUnique(
-            const vk::Device& device,
-            vk::PipelineCache pipelineCache,
-            const vk::RayTracingPipelineCreateInfoKHR& createInfo,
-            const vk::AllocationCallbacks* allocator = nullptr) {
-        vk::Pipeline pipeline;
-        auto result = device.createRayTracingPipelinesKHR(pipelineCache, 1, &createInfo, allocator, &pipeline);
-        if (result != vk::Result::eSuccess) {
-            throw std::runtime_error("Failed to create ray tracing pipeline");
-        }
-        return vk::UniquePipeline(pipeline, device, allocator);
+    void RayTracingPipeline::createPipeline() {
+
+        vk::RayTracingPipelineCreateInfoKHR pipelineInfo{};
+        pipelineInfo.stageCount = static_cast<uint32_t>(shaderStages_.size());
+        pipelineInfo.pStages = shaderStages_.data();
+        pipelineInfo.groupCount = static_cast<uint32_t>(shaderGroups_.size());
+        pipelineInfo.pGroups = shaderGroups_.data();
+        pipelineInfo.layout = pipelineLayout_.get();
+
+        pipeline_ = device_.get().createRayTracingPipelineKHRUnique({}, {}, pipelineInfo).value;
     }
+    // Implemented functions
 
-    inline void RayTracingPipeline::createPipeline() {
-        // Define shader stages
-        std::vector<vk::PipelineShaderStageCreateInfo> stages = {
-                { {}, vk::ShaderStageFlagBits::eRaygenKHR, rgen_.get(), "main" },
-                { {}, vk::ShaderStageFlagBits::eMissKHR,   rmiss_.get(), "main" },
-                { {}, vk::ShaderStageFlagBits::eClosestHitKHR, rchit_.get(), "main" }
-        };
+//
+//    inline void RayTracingPipeline::queryRayTracingProperties() {
+//        rtProps_.sType = vk::StructureType::ePhysicalDeviceRayTracingPipelinePropertiesKHR;
+//        vk::PhysicalDeviceProperties2 props2{};
+//        props2.sType = vk::StructureType::ePhysicalDeviceProperties2;
+//        props2.pNext = &rtProps_;
+//        device_.physical().getProperties2(&props2);
+//        core::log::debug("RT Shader Group Handle Size: {}", rtProps_.shaderGroupHandleSize);
+//    }
+//
+//
 
-        // Shader groups
-        std::vector<vk::RayTracingShaderGroupCreateInfoKHR> groups = {
-                { vk::RayTracingShaderGroupTypeKHR::eGeneral, 0, VK_SHADER_UNUSED_KHR, VK_SHADER_UNUSED_KHR, VK_SHADER_UNUSED_KHR },
-                { vk::RayTracingShaderGroupTypeKHR::eGeneral, 1, VK_SHADER_UNUSED_KHR, VK_SHADER_UNUSED_KHR, VK_SHADER_UNUSED_KHR },
-                { vk::RayTracingShaderGroupTypeKHR::eTrianglesHitGroup, VK_SHADER_UNUSED_KHR, 2, VK_SHADER_UNUSED_KHR, VK_SHADER_UNUSED_KHR }
-        };
+//
+//    inline vk::UniquePipeline RayTracingPipeline::createRayTracingPipelineKHRUnique(
+//            const vk::Device& device,
+//            vk::PipelineCache pipelineCache,
+//            const vk::RayTracingPipelineCreateInfoKHR& createInfo,
+//            const vk::AllocationCallbacks* allocator = nullptr) {
+//        vk::Pipeline pipeline;
+//        auto result = device.createRayTracingPipelinesKHR(pipelineCache, 1, &createInfo, allocator, &pipeline);
+//        if (result != vk::Result::eSuccess) {
+//            throw std::runtime_error("Failed to create ray tracing pipeline");
+//        }
+//        return vk::UniquePipeline(pipeline, device, allocator);
+//    }
+//
 
-        vk::RayTracingPipelineCreateInfoKHR pipelineInfo{
-                {},                          // flags
-                static_cast<uint32_t>(stages.size()),
-                stages.data(),
-                static_cast<uint32_t>(groups.size()),
-                groups.data(),
-                {},                          // maxRecursionDepth, layout
-                pipelineLayout_.get(),       // pipeline layout
-                {}, {},                      // base pipeline
-                0
-        };
+//    inline void RayTracingPipeline::createShaderBindingTable() {
+//        // create shader binding table here
+//    }
+//
+//    inline void RayTracingPipeline::recordTraceRays(const vk::CommandBuffer& cmdBuf, vk::Extent2D extent) {
+//        // Fill StridedDeviceAddressRegionKHR for rgen, miss, chit, etc.
+//        // call traceRays and record them in a buffer
+//    }
 
-        pipeline_ = device_.createRayTracingPipelineKHRUnique({}, {}, pipelineInfo).value;
-    }
-
-    inline void RayTracingPipeline::createShaderBindingTable() {
-        // create shader binding table here
-    }
-
-    inline void RayTracingPipeline::recordTraceRays(const CommandBuffer& cmdBuf, vk::Extent2D extent) {
-        // Fill StridedDeviceAddressRegionKHR for rgen, miss, chit, etc.
-        // call traceRays and record them in a buffer
-    }
 
 }

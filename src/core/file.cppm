@@ -1,25 +1,25 @@
 module;
 
-#include <string>;
-#include <vector>;
-#include <fstream>;
-#include <stdexcept>;
+#include <string>
+#include <vector>
+#include <fstream>
+#include <stdexcept>
 
 export module core.file;
 
-export inline std::vector<char> loadBinaryFile(const std::string &filename) {
-    std::ifstream file(filename, std::ios::ate | std::ios::binary);
+export namespace core::file {
 
-    if (!file.is_open()) {
-        throw std::runtime_error("Failed to open file: " + filename);
-    }
+inline std::vector<char> loadBinaryFile(std::string_view path) {
+    std::ifstream file(std::string(path), std::ios::ate | std::ios::binary);
+    if (!file.is_open())
+        throw std::runtime_error("Failed to open shader file: " + std::string(path));
 
-    std::streamsize fileSize = static_cast<std::streamsize>(file.tellg());
-    std::vector<char> buffer(fileSize);
+    size_t size = file.tellg();
+    std::vector<char> buffer(size);
 
     file.seekg(0);
-    file.read(buffer.data(), fileSize);
-    file.close();
+    file.read(buffer.data(), size);
 
     return buffer;
+}
 }

@@ -16,9 +16,15 @@ import vulkan.context.instance;
 import vulkan.context.device;
 import vulkan.context.surface;
 import vulkan.context.swapchain;
+import vulkan.context.command_pool;
 import vulkan.dispatch;
 import vulkan.memory.descriptor_pool;
 import vulkan.memory.descriptor_set_layout;
+import vulkan.memory.buffer;
+import vulkan.ray_tracing_pipeline;
+import vulkan.memory.image;
+import vulkan.raytracing.blas;
+
 
 import scene.camera;
 import scene.geometry.vertex;
@@ -84,9 +90,21 @@ public:
     void run() const {
         core::log::info("Entering main loop");
 
-        /* JUST FOR TESTING */
-        std::vector<vulkan::memory::DescriptorSetLayout> layouts;
-        // Create the camera
+        vulkan::context::CommandPool commandPool(device_->get(), device_->computeFamilyIndex());
+
+        vk::Extent3D extent = { swapchain_->extent().width, swapchain_->extent().height, 1 };
+
+        vulkan::memory::Image storageImage(
+                device_->get(),
+                device_->physical(),
+                extent,
+                vk::Format::eR32G32B32A32Sfloat,
+                vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc,
+                vk::ImageAspectFlagBits::eColor
+        );
+
+
+
         glm::vec3 cameraPosition{ 0.0f,0.0f,1.0f };
         glm::vec3   cameraLookAt{ 0.0f,0.0f,0.0f };
         glm::vec3       cameraUp{ 0.0f,1.0f,0.0f };
@@ -97,36 +115,65 @@ public:
         scene::Camera camera(*device_, fovY, cameraPosition, cameraLookAt, cameraUp, pixelWidth, pixelHeight);
         vk::Buffer cameraBuffer = camera.getBuffer();
 
-        layouts.emplace_back(device_->get());
-        layouts.back().addBinding(0, vk::DescriptorType::eUniformBuffer,  vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR);
-        layouts.back().build();
+        std::vector<glm::vec3> triangleVertices = {
+                { -0.5f, -0.5f, 0.0f },
+                {  0.5f, -0.5f, 0.0f },
+                {  0.0f,  0.5f, 0.0f }
+        };
 
-        // Create a triangle
-        scene::geometry::Vertex v0{glm::vec3{ -0.5f, -0.5f, -0.5f }};
-        scene::geometry::Vertex v1{glm::vec3{  0.5f, -0.5f, -0.5f }};
-        scene::geometry::Vertex v2{glm::vec3{  0.0f,  0.5f, -0.5f }};
+        vulkan::memory::Buffer vertexBuffer(
+                *device_,
+                sizeof(glm::vec3) * triangleVertices.size(),
+                vk::BufferUsageFlagBits::eStorageBuffer |
+                vk::BufferUsageFlagBits::eShaderDeviceAddress |
+                vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR,
+                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+        );
+        vertexBuffer.fill(triangleVertices.data(), sizeof(glm::vec3) * triangleVertices.size(), 0);
 
-        scene::geometry::Triangle triangle(*device_, v0, v1, v2);
+        vulkan::raytracing::BLAS triangleBLAS (*device_, commandPool, vertexBuffer.get(), 3, sizeof(glm::vec3));
 
-        layouts.emplace_back(device_->get());
-        layouts.back().addBinding(1, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR);
-        layouts.back().build();
+
+        /* JUST FOR TESTING */
+        // FOR NOW JUST ONE DESCRIPTOR SET
+        vulkan::memory::DescriptorSetLayout layout(device_->get());
+        // Create the camera
+
+        layout.addBinding(0, vk::DescriptorType::eStorageImage,  vk::ShaderStageFlagBits::eRaygenKHR); // image
+        layout.addBinding(2, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR);  // camera
+        layout.addBinding(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR); // vertex buffer
+        layout.build();
 
         // We need this to happen automatically based off of needs
         std::vector<vk::DescriptorPoolSize> poolSizes = {
+                {vk::DescriptorType::eStorageImage, 1},
                 {vk::DescriptorType::eStorageBuffer, 1},
                 {vk::DescriptorType::eUniformBuffer, 1}
         };
 
-        vulkan::memory::DescriptorPool pool(device_->get(), poolSizes, 2);
-        pool.allocate(layouts);
+        vulkan::memory::DescriptorPool pool(device_->get(), poolSizes, 3);
+        vk::DescriptorSet set = pool.allocate(layout)[0];
+
+        pool.writeImage(set, 0, storageImage.getImageInfo(), vk::DescriptorType::eStorageImage);
+        pool.writeBuffer(set, 2, cameraBuffer, sizeof(scene::Camera::GPUCameraData), vk::DescriptorType::eUniformBuffer);
+        pool.writeBuffer(set, 3, vertexBuffer.get(), sizeof(glm::vec3) * triangleVertices.size() , vk::DescriptorType::eStorageBuffer);
+
+        std::vector<vk::DescriptorSetLayout> descriptorLayouts{layout.get()};
+
+        auto raytracePipeline = vulkan::RayTracingPipeline(*device_, descriptorLayouts, "shaders/spv/raygen.rgen.spv", "shaders/spv/miss.rmiss.spv", "shaders/spv/closesthit.rchit.spv");
 
         while (!glfwWindowShouldClose(window_)) {
+            auto cmd = commandPool.getSingleUseBuffer();
+            //cmd->bindDescriptorSets(vk::PipelineBindPoint::eRayTracingKHR, raytracingPipelineLayout_, 0, sets, {});
+            //commandPool.submitSingleUse(std::move(cmd), device_->getGraphicsQueue());
+
             glfwPollEvents();
             // in the future: record & submit ray-tracing commands here
         }
         core::log::info("Main loop exited");
     }
+
+
 
 private:
     GLFWwindow* window_{nullptr};

@@ -100,10 +100,18 @@ inline Buffer::Buffer(
 
     core::log::debug("Buffer: Memory requirements (size={}, typeBits={:#x})", req.size, req.memoryTypeBits);
 
-    const vk::MemoryAllocateInfo allocInfo{
+    vk::MemoryAllocateFlagsInfo flagsInfo{};
+
+    vk::MemoryAllocateInfo allocInfo{
             req.size, // allocationSize
             findMemoryType(req.memoryTypeBits, properties_, physical_) // memoryTypeIndex
     };
+
+    if (usage & vk::BufferUsageFlagBits::eShaderDeviceAddress) {
+        flagsInfo.flags = vk::MemoryAllocateFlagBits::eDeviceAddress;
+        allocInfo.pNext = &flagsInfo;
+    }
+
     memory_ = device_.allocateMemoryUnique(allocInfo);
     core::log::debug("Buffer: Allocated memory (size={}, memoryTypeIndex={})", req.size, allocInfo.memoryTypeIndex);
 

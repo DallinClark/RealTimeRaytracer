@@ -118,21 +118,22 @@ foreach(SHADER ${GLSL_SHADERS})
 
     set(SPV ${SHADER_BIN_DIR}/${FILE_NAME}.spv)
 
-    add_custom_target(
-            force_compile_${FILE_NAME}_spv ALL
+    add_custom_command(
+            OUTPUT ${SPV}
             COMMAND ${CMAKE_COMMAND} -E echo "Compiling ${FILE_NAME}"
             COMMAND ${GLSLC_EXECUTABLE}
-            --target-env=vulkan1.3
+            --target-env=vulkan1.2
             -o ${SPV} ${SHADER}
-            COMMENT "compiling ${FILE_NAME} to ${SPV}"
+            DEPENDS ${SHADER}
+            COMMENT "Compiling ${FILE_NAME} → ${SPV}"
             VERBATIM
     )
 
-    list(APPEND SPV_TARGETS force_compile_${FILE_NAME}_spv)
+    list(APPEND SPV_TARGETS ${SPV})
 endforeach()
 
-# Umbrella target to group shader compilation
-add_custom_target(CompileShaders DEPENDS ${SPV_TLARGETS})
+add_custom_target(CompileShaders ALL DEPENDS ${SPV_TARGETS})
+
 
 # ----------------------------------------------------------------------------
 # Main executable
@@ -143,9 +144,11 @@ add_executable(${PROJECT_NAME}
         src/vulkan/memory/descriptor_set_layout.cppm
         src/vulkan/memory/descriptor_pool.cppm
         src/scene/camera.cppm
-        src/vulkan/context/command_buffer.cppm
+        src/vulkan/context/command_pool.cppm
         src/scene/geometry/triangle.cppm
         src/scene/geometry/vertex.cppm
+        src/vulkan/memory/image.cppm
+        src/vulkan/raytracing/blas.cppm
 )
 
 # --- MODULE SUPPORT -----------------------------------------
