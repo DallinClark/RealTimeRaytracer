@@ -90,7 +90,16 @@ endif()
 # ----------------------------------------------------------------------------
 
 # bind glslc program
-set(GLSLC_EXECUTABLE "${VULKAN_SDK_ROOT}/bin/glslc")
+find_program( SYSTEM_GLSLC
+        NAMES    glslc
+        REQUIRED
+)
+
+if( NOT SYSTEM_GLSLC )
+    set(GLSLC_EXECUTABLE "${VULKAN_SDK_ROOT}/bin/glslc")
+endif()
+
+set( GLSLC_EXECUTABLE "${SYSTEM_GLSLC}" CACHE STRING "Path to glslc" )
 message(STATUS "Using glslc: ${GLSLC_EXECUTABLE}")
 
 # Set shader source and build paths
