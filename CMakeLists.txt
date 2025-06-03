@@ -86,6 +86,68 @@ if (NOT TARGET glm::glm)
 endif()
 
 # ----------------------------------------------------------------------------
+# Convert GLSL files to SPIR-V
+# ----------------------------------------------------------------------------
+
+# bind glslc program
+# Try to find glslc on the system
+find_program(SYSTEM_GLSLC glslc)
+
+# Fallback to Vulkan SDK path if not found
+if(NOT SYSTEM_GLSLC)
+    set(GLSLC_EXECUTABLE "${VULKAN_SDK_ROOT}/bin/glslc")
+else()
+    set(GLSLC_EXECUTABLE "${SYSTEM_GLSLC}")
+endif()
+
+# Cache the path so it shows up in CMake GUIs and is reused
+set(GLSLC_EXECUTABLE "${GLSLC_EXECUTABLE}" CACHE STRING "Path to glslc executable")
+
+message(STATUS "Using glslc: ${GLSLC_EXECUTABLE}")
+
+# Set shader source and build paths
+set(SHADER_SRC_DIR ${CMAKE_SOURCE_DIR}/src/shaders)
+set(SHADER_BIN_DIR ${CMAKE_BINARY_DIR}/shaders/spv)
+file(MAKE_DIRECTORY ${SHADER_BIN_DIR})
+
+file(GLOB_RECURSE GLSL_SHADERS
+        ${SHADER_SRC_DIR}/*.rgen
+        ${SHADER_SRC_DIR}/*.rchit
+        ${SHADER_SRC_DIR}/*.rmiss
+        ${SHADER_SRC_DIR}/*.rint
+)
+
+message(STATUS "Found shaders:")
+foreach(s IN LISTS GLSL_SHADERS)
+    message(STATUS "  ${s}")
+endforeach()
+
+set(SPV_TARGETS "")
+
+foreach(SHADER ${GLSL_SHADERS})
+    get_filename_component(FILE_NAME ${SHADER} NAME)
+    get_filename_component(EXT ${SHADER} EXT)
+
+    set(SPV ${SHADER_BIN_DIR}/${FILE_NAME}.spv)
+
+    add_custom_command(
+            OUTPUT ${SPV}
+            COMMAND ${CMAKE_COMMAND} -E echo "Compiling ${FILE_NAME}"
+            COMMAND ${GLSLC_EXECUTABLE}
+            --target-env=vulkan1.2
+            -o ${SPV} ${SHADER}
+            DEPENDS ${SHADER}
+            COMMENT "Compiling ${FILE_NAME} → ${SPV}"
+            VERBATIM
+    )
+
+    list(APPEND SPV_TARGETS ${SPV})
+endforeach()
+
+add_custom_target(CompileShaders ALL DEPENDS ${SPV_TARGETS})
+
+
+# ----------------------------------------------------------------------------
 # Main executable
 # ----------------------------------------------------------------------------
 add_executable(${PROJECT_NAME}
@@ -94,9 +156,13 @@ add_executable(${PROJECT_NAME}
         src/vulkan/memory/descriptor_set_layout.cppm
         src/vulkan/memory/descriptor_pool.cppm
         src/scene/camera.cppm
-        src/vulkan/context/command_buffer.cppm
+        src/vulkan/context/command_pool.cppm
         src/scene/geometry/triangle.cppm
         src/scene/geometry/vertex.cppm
+        src/vulkan/memory/image.cppm
+        src/vulkan/raytracing/blas.cppm
+        src/vulkan/raytracing/tlas.cppm
+        src/vulkan/raytracing/tlas.cppm
 )
 
 # --- MODULE SUPPORT -----------------------------------------
@@ -131,3 +197,5 @@ target_compile_definitions(RealTimeRaytracer
         PRIVATE
         VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1   # tell every TU to use the dynamic dispatcher
 )
+
+add_dependencies(${PROJECT_NAME} CompileShaders)

@@ -27,6 +27,7 @@ public:
     void build();
 
     vk::DescriptorSetLayout get() const noexcept { return _layout.get(); }
+    const std::vector<vk::DescriptorSetLayoutBinding>& bindings() const noexcept { return _bindings; }
 
 
 private:
