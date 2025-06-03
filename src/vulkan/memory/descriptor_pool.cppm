@@ -22,7 +22,10 @@ public:
 
     void writeImage(vk::DescriptorSet set, uint32_t binding, const vk::DescriptorImageInfo& imageInfo, vk::DescriptorType type);
 
-    ~DescriptorPool() = default;
+    void writeAccelerationStructure(vk::DescriptorSet set, uint32_t binding, vk::DescriptorType type, vk::AccelerationStructureKHR TLAS);
+
+
+        ~DescriptorPool() = default;
 
     /// Allocate descriptor sets following the provided layouts.
     /// Returns a vector of handles; throws on failure.
@@ -99,7 +102,7 @@ std::vector<vk::DescriptorSet> DescriptorPool::allocate(const DescriptorSetLayou
     }
 }
 
-
+// TODO maybe move this out of pool, or combine into one function
 void DescriptorPool::writeBuffer(vk::DescriptorSet set, uint32_t binding, vk::Buffer buffer, vk::DeviceSize size, vk::DescriptorType type) {
     vk::DescriptorBufferInfo bufferInfo{ buffer, 0, size };
     vk::WriteDescriptorSet write{
@@ -115,5 +118,18 @@ void DescriptorPool::writeImage(vk::DescriptorSet set, uint32_t binding, const v
     device_.updateDescriptorSets(write, {});
 }
 
+void DescriptorPool::writeAccelerationStructure(vk::DescriptorSet set, uint32_t binding, vk::DescriptorType type, vk::AccelerationStructureKHR TLAS) {
+    vk::WriteDescriptorSetAccelerationStructureKHR asInfo{};
+    asInfo.accelerationStructureCount = 1;
+    asInfo.pAccelerationStructures = &TLAS;
 
+    vk::WriteDescriptorSet write{};
+    write.setDstSet(set);
+    write.setDescriptorType(type);
+    write.setDescriptorCount(1);
+    write.setDstBinding(binding);
+    write.setPNext(&asInfo);
+
+    device_.updateDescriptorSets(write, {});
+}
 } // namespace vulkan

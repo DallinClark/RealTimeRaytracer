@@ -22,6 +22,10 @@ namespace vulkan::memory {
         vk::Format getFormat() const noexcept { return format_; }
         vk::DescriptorImageInfo getImageInfo();
 
+        static void setImageLayout(vk::CommandBuffer commandBuffer, vk::Image image, vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
+        static vk::AccessFlags toAccessFlags(vk::ImageLayout layout);
+        static void copyImage(vk::CommandBuffer commandBuffer, vk::Image srcImage, vk::Image dstImage, vk::Extent3D extent);
+
     private:
         vk::Device device_;
         vk::Extent3D extent_;
@@ -105,6 +109,41 @@ namespace vulkan::memory {
 
         return imageInfo;
     };
+
+    void Image::setImageLayout(vk::CommandBuffer commandBuffer, vk::Image image, vk::ImageLayout oldLayout, vk::ImageLayout newLayout) {
+        vk::ImageMemoryBarrier barrier;
+        barrier.setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
+        barrier.setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
+        barrier.setImage(image);
+        barrier.setOldLayout(oldLayout);
+        barrier.setNewLayout(newLayout);
+        barrier.setSubresourceRange({vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1});
+        barrier.setSrcAccessMask(toAccessFlags(oldLayout));
+        barrier.setDstAccessMask(toAccessFlags(newLayout));
+        commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eAllCommands,  //
+                                      vk::PipelineStageFlagBits::eAllCommands,  //
+                                      {}, {}, {}, barrier);
+    }
+
+    vk::AccessFlags Image::toAccessFlags(vk::ImageLayout layout) {
+        switch (layout) {
+            case vk::ImageLayout::eTransferSrcOptimal:
+                return vk::AccessFlagBits::eTransferRead;
+            case vk::ImageLayout::eTransferDstOptimal:
+                return vk::AccessFlagBits::eTransferWrite;
+            default:
+                return {};
+        }
+    }
+
+    void Image::copyImage(vk::CommandBuffer commandBuffer, vk::Image srcImage, vk::Image dstImage, vk::Extent3D extent) {
+        vk::ImageCopy copyRegion;
+        copyRegion.setSrcSubresource({vk::ImageAspectFlagBits::eColor, 0, 0, 1});
+        copyRegion.setDstSubresource({vk::ImageAspectFlagBits::eColor, 0, 0, 1});
+        copyRegion.setExtent(extent);
+        commandBuffer.copyImage(srcImage, vk::ImageLayout::eTransferSrcOptimal, dstImage, vk::ImageLayout::eTransferDstOptimal, copyRegion);
+    }
+
 
 
 } // namespace vulkan::memory

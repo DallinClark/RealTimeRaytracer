@@ -21,6 +21,7 @@ namespace vulkan::raytracing {
         );
 
         const vk::AccelerationStructureKHR& get() const { return accelerationStructure_.get(); }
+        const vk::DeviceAddress getAddress() const { return deviceAddress_; }
 
     private:
         vk::Device device_;
@@ -30,36 +31,36 @@ namespace vulkan::raytracing {
         vk::DeviceAddress deviceAddress_;
 
         vk::UniqueAccelerationStructureKHR accelerationStructure_;
-        vk::Buffer vertexBuffer_;
     };
 
+    // TODO USE THE MEMORY ADRESS STUFF IN BUFFER CLASS
     BLAS::BLAS( const context::Device& device, context::CommandPool& commandPool, const vk::Buffer& vertexBuffer, uint32_t vertexCount, vk::DeviceSize vertexStride)
-            : device_(device.get()),physicalDevice_(device.physical()), vertexBuffer_(vertexBuffer) {
+            : device_(device.get()),physicalDevice_(device.physical()) {
 
         vk::DeviceOrHostAddressConstKHR vertexAddress{};
 
         vk::BufferDeviceAddressInfo info;
-        info.buffer = vertexBuffer_;
+        info.buffer = vertexBuffer;
         vk::DeviceAddress addr = device_.getBufferAddress(info);
 
         vertexAddress.deviceAddress = addr;
 
-        vk::AccelerationStructureGeometryTrianglesDataKHR triangles{
-                vk::Format::eR32G32B32Sfloat,
-                vertexAddress,
-                vertexStride,
-                vertexCount,
-                vk::IndexType::eNoneKHR,
-                {},
-                {}
-        };
+        //  device pointer to the buffers holding triangle vertex/index data, along with information for interpreting it as an array
+        vk::AccelerationStructureGeometryTrianglesDataKHR triangles{};
+        triangles.setVertexFormat(vk::Format::eR32G32B32Sfloat);
+        triangles.setVertexStride(vertexStride);
+        triangles.setIndexType(vk::IndexType::eNoneKHR);
+        triangles.setVertexData(vertexAddress);
+        triangles.setMaxVertex(vertexCount);
 
-        vk::AccelerationStructureGeometryKHR geometry{
-                vk::GeometryTypeKHR::eTriangles,
-                triangles,
-                vk::GeometryFlagBitsKHR::eOpaque
-        };
+        //wrapper around the above with the geometry type enum (triangles in this case) plus flags for the AS builder
+        vk::AccelerationStructureGeometryKHR geometry{};
+        geometry.setGeometryType(vk::GeometryTypeKHR::eTriangles);
+        geometry.setFlags(vk::GeometryFlagBitsKHR::eOpaque);
+        geometry.geometry.setTriangles(triangles);
 
+
+        // the indices within the vertex arrays to source input geometry for the BLAS.
         vk::AccelerationStructureBuildRangeInfoKHR range{
                 vertexCount, 0, 0, 0
         };
@@ -114,6 +115,7 @@ namespace vulkan::raytracing {
         auto cmd = commandPool.getSingleUseBuffer();
         cmd->buildAccelerationStructuresKHR(1, &buildInfo, &pRange);
         commandPool.submitSingleUse(std::move(cmd), device.computeQueue());
+        device_.waitIdle();
 
         vk::AccelerationStructureDeviceAddressInfoKHR addressInfo{
                 accelerationStructure_.get()

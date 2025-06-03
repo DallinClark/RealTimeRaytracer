@@ -90,16 +90,19 @@ endif()
 # ----------------------------------------------------------------------------
 
 # bind glslc program
-find_program( SYSTEM_GLSLC
-        NAMES    glslc
-        REQUIRED
-)
+# Try to find glslc on the system
+find_program(SYSTEM_GLSLC glslc)
 
-if( NOT SYSTEM_GLSLC )
+# Fallback to Vulkan SDK path if not found
+if(NOT SYSTEM_GLSLC)
     set(GLSLC_EXECUTABLE "${VULKAN_SDK_ROOT}/bin/glslc")
+else()
+    set(GLSLC_EXECUTABLE "${SYSTEM_GLSLC}")
 endif()
 
-set( GLSLC_EXECUTABLE "${SYSTEM_GLSLC}" CACHE STRING "Path to glslc" )
+# Cache the path so it shows up in CMake GUIs and is reused
+set(GLSLC_EXECUTABLE "${GLSLC_EXECUTABLE}" CACHE STRING "Path to glslc executable")
+
 message(STATUS "Using glslc: ${GLSLC_EXECUTABLE}")
 
 # Set shader source and build paths
@@ -158,6 +161,8 @@ add_executable(${PROJECT_NAME}
         src/scene/geometry/vertex.cppm
         src/vulkan/memory/image.cppm
         src/vulkan/raytracing/blas.cppm
+        src/vulkan/raytracing/tlas.cppm
+        src/vulkan/raytracing/tlas.cppm
 )
 
 # --- MODULE SUPPORT -----------------------------------------

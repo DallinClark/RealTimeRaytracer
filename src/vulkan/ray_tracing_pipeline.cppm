@@ -3,6 +3,7 @@ module;
 #include <string>
 #include <fstream>
 #include <vulkan/vulkan.hpp>
+#include <optional>
 
 export module vulkan.ray_tracing_pipeline;
 
@@ -10,6 +11,7 @@ import core.file;
 import core.log;
 import vulkan.context.device;
 import vulkan.context.command_pool;
+import vulkan.memory.buffer;
 
 namespace vulkan {
 
@@ -26,14 +28,12 @@ namespace vulkan {
         void createPipelineLayout();
 
         void createPipeline();
-        //        void createShaderBindingTable();
-        //        void recordTraceRays(const CommandBuffer& cmdBuf, vk::Extent2D extent);
-        //        vk::UniquePipeline createRayTracingPipeline(const vk::Device& device,
-        //                                                    vk::PipelineCache pipelineCache,
-        //                                                    const vk::RayTracingPipelineCreateInfoKHR& createInfo,
-        //                                                    const vk::AllocationCallbacks* allocator = nullptr);
+        void createShaderBindingTable();
+        void recordTraceRays(const vk::CommandBuffer& cmdBuf, vk::Extent3D extent);
+
 
         [[nodiscard]] vk::Pipeline get() const noexcept { return pipeline_.get(); }
+        [[nodiscard]] vk::PipelineLayout getLayout() const noexcept { return pipelineLayout_.get(); }
 
     private:
         const context::Device &device_;
@@ -49,27 +49,36 @@ namespace vulkan {
         vk::UniquePipeline pipeline_;
 
         // Shader Binding Table (SBT) buffer
-        vk::UniqueBuffer sbtBuffer_;
-        vk::UniqueDeviceMemory sbtMemory_;
+//        vk::UniqueBuffer sbtBuffer_;
+//        vk::UniqueDeviceMemory sbtMemory_;
 
         // Ray tracing props
         vk::PhysicalDeviceRayTracingPipelinePropertiesKHR rtProps_{};
 
         // Internal utils
         inline vk::UniqueShaderModule createShaderModule(std::string_view path);
-        //void queryRayTracingProperties();
+        void queryRayTracingProperties();
+
+        vk::StridedDeviceAddressRegionKHR raygenRegion_;
+        vk::StridedDeviceAddressRegionKHR missRegion_;
+        vk::StridedDeviceAddressRegionKHR hitRegion_;
+
+        std::optional<vulkan::memory::Buffer> raygenSBT_;
+        std::optional<vulkan::memory::Buffer> missSBT_;
+        std::optional<vulkan::memory::Buffer> hitSBT_;
+
     };
 
 
     RayTracingPipeline::RayTracingPipeline(const context::Device &device,
                                            std::vector<vk::DescriptorSetLayout> &descriptorSetLayouts,
                                            std::string_view rgenPath, std::string_view rmissPath,
-                                           std::string_view rchitPath) : device_{device},
-                                                                         descriptorSetLayouts_(descriptorSetLayouts) {
+                                           std::string_view rchitPath) : device_{device}, descriptorSetLayouts_(descriptorSetLayouts) {
         createShaderModules(rgenPath, rmissPath, rchitPath);
         createShaderGroups();
         createPipelineLayout();
         createPipeline();
+        createShaderBindingTable();
     }
 
     void
@@ -123,41 +132,52 @@ namespace vulkan {
     }
     // Implemented functions
 
-//
-//    inline void RayTracingPipeline::queryRayTracingProperties() {
-//        rtProps_.sType = vk::StructureType::ePhysicalDeviceRayTracingPipelinePropertiesKHR;
-//        vk::PhysicalDeviceProperties2 props2{};
-//        props2.sType = vk::StructureType::ePhysicalDeviceProperties2;
-//        props2.pNext = &rtProps_;
-//        device_.physical().getProperties2(&props2);
-//        core::log::debug("RT Shader Group Handle Size: {}", rtProps_.shaderGroupHandleSize);
-//    }
-//
-//
 
-//
-//    inline vk::UniquePipeline RayTracingPipeline::createRayTracingPipelineKHRUnique(
-//            const vk::Device& device,
-//            vk::PipelineCache pipelineCache,
-//            const vk::RayTracingPipelineCreateInfoKHR& createInfo,
-//            const vk::AllocationCallbacks* allocator = nullptr) {
-//        vk::Pipeline pipeline;
-//        auto result = device.createRayTracingPipelinesKHR(pipelineCache, 1, &createInfo, allocator, &pipeline);
-//        if (result != vk::Result::eSuccess) {
-//            throw std::runtime_error("Failed to create ray tracing pipeline");
-//        }
-//        return vk::UniquePipeline(pipeline, device, allocator);
-//    }
-//
+    void RayTracingPipeline::queryRayTracingProperties() {
+        rtProps_.sType = vk::StructureType::ePhysicalDeviceRayTracingPipelinePropertiesKHR;
+        vk::PhysicalDeviceProperties2 props2{};
+        props2.sType = vk::StructureType::ePhysicalDeviceProperties2;
+        props2.pNext = &rtProps_;
+        device_.physical().getProperties2(&props2);
+        core::log::debug("RT Shader Group Handle Size: {}", rtProps_.shaderGroupHandleSize);
+    }
 
-//    inline void RayTracingPipeline::createShaderBindingTable() {
-//        // create shader binding table here
-//    }
-//
-//    inline void RayTracingPipeline::recordTraceRays(const vk::CommandBuffer& cmdBuf, vk::Extent2D extent) {
-//        // Fill StridedDeviceAddressRegionKHR for rgen, miss, chit, etc.
-//        // call traceRays and record them in a buffer
-//    }
+    void RayTracingPipeline::createShaderBindingTable() {
+        queryRayTracingProperties();
+
+        // Calculate shader binding table (SBT) size THIS MAY BE WRONG
+        const uint32_t handleSize = rtProps_.shaderGroupHandleSize;
+        const uint32_t handleSizeAligned = rtProps_.shaderGroupHandleAlignment;
+        const uint32_t groupCount = static_cast<uint32_t>(shaderGroups_.size());
+        const uint32_t sbtSize = handleSizeAligned * groupCount;
+
+        // Get shader group handles
+        std::vector<uint8_t> handleStorage(sbtSize);
+        auto result = device_.get().getRayTracingShaderGroupHandlesKHR(pipeline_.get(), 0, groupCount, sbtSize, handleStorage.data());
+        if (result != vk::Result::eSuccess) {
+            throw std::runtime_error("Failed to get shader group handles");
+        }
+
+        // Create SBT
+        raygenSBT_ = vulkan::memory::Buffer{device_, handleSize, vk::BufferUsageFlagBits::eShaderBindingTableKHR | vk::BufferUsageFlagBits::eShaderDeviceAddress , vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent};
+        missSBT_   = vulkan::memory::Buffer{device_, handleSize, vk::BufferUsageFlagBits::eShaderBindingTableKHR | vk::BufferUsageFlagBits::eShaderDeviceAddress, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent};
+        hitSBT_    = vulkan::memory::Buffer{device_, handleSize, vk::BufferUsageFlagBits::eShaderBindingTableKHR | vk::BufferUsageFlagBits::eShaderDeviceAddress, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent};
+
+        raygenSBT_->fill(handleStorage.data() + 0 * handleSizeAligned, handleSize);
+        missSBT_->fill(handleStorage.data()   + 1 * handleSizeAligned, handleSize);
+        hitSBT_->fill(handleStorage.data()    + 2 * handleSizeAligned, handleSize);
+
+        uint32_t stride = handleSizeAligned;
+        uint32_t size = handleSizeAligned;
+
+        raygenRegion_ = vk::StridedDeviceAddressRegionKHR{ raygenSBT_->getAddress(), stride, size };
+        missRegion_   = vk::StridedDeviceAddressRegionKHR{ missSBT_->getAddress(),   stride, size };
+        hitRegion_    = vk::StridedDeviceAddressRegionKHR{ hitSBT_->getAddress(),    stride, size };
+    }
+
+    inline void RayTracingPipeline::recordTraceRays(const vk::CommandBuffer& cmdBuf, vk::Extent3D extent) {
+        cmdBuf.traceRaysKHR(raygenRegion_, missRegion_, hitRegion_, {}, extent.width, extent.height, 1);
+    }
 
 
 }

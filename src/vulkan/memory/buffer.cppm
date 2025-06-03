@@ -36,6 +36,7 @@ public:
 
     /// Raw vk::Buffer handle
     [[nodiscard]] vk::Buffer get() const noexcept { return buffer_.get(); }
+    [[nodiscard]] uint64_t getAddress() const noexcept { return deviceAddress_; }
 
     /// Raw vk::DeviceMemory handle
     [[nodiscard]] vk::DeviceMemory memory() const noexcept { return memory_.get(); }
@@ -57,7 +58,7 @@ public:
             vk::DeviceSize offset = 0
     );
 
-    vk::DeviceAddress address() const noexcept;
+    [[nodiscard]] vk::DeviceAddress address() const noexcept;
 
 private:
     vk::Device              device_;
@@ -66,6 +67,7 @@ private:
     vk::UniqueDeviceMemory  memory_;
     vk::DeviceSize          allocationSize_;
     vk::MemoryPropertyFlags properties_;
+    uint64_t                deviceAddress_;
 
     /// Pick a memory type index matching `typeFilter` and `properties`
     static uint32_t findMemoryType(
@@ -118,6 +120,11 @@ inline Buffer::Buffer(
     // Bind memory to the buffer
     device_.bindBufferMemory(buffer_.get(), memory_.get(), /*offset*/ 0);
     core::log::debug("Buffer: Bound memory to buffer");
+
+    if (usage & vk::BufferUsageFlagBits::eShaderDeviceAddress) {
+        vk::BufferDeviceAddressInfoKHR bufferDeviceAI{*buffer_};
+        deviceAddress_ = device_.getBufferAddressKHR(&bufferDeviceAI);
+    }
 }
 
 inline uint32_t Buffer::findMemoryType(
@@ -141,7 +148,7 @@ inline uint32_t Buffer::findMemoryType(
     throw std::runtime_error("Buffer: Failed to find suitable memory type");
 }
 
-inline void* Buffer::map(
+inline void* Buffer::map(  // I think size is just allocationSize_, not sure... TODO update this entire class
     const vk::DeviceSize offset,
     const vk::DeviceSize size
 ) {

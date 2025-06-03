@@ -2,10 +2,10 @@
 #extension GL_EXT_ray_tracing : require
 #extension GL_EXT_nonuniform_qualifier : enable
 
-layout(set = 0, binding = 0, rgba32f) uniform image2D image; // image, holds pixels for the output
+layout(set = 0, binding = 0, rgba8) uniform image2D image;
 layout(set = 0, binding = 1) uniform accelerationStructureEXT topLevelAS;
 
-struct GPUCameraData { // recreate camera details
+struct GPUCameraData {
     vec3 position;
     vec3 topLeftViewportCorner;
     vec3 horizontalViewportDelta;
@@ -16,31 +16,23 @@ layout(set = 0, binding = 2) uniform CameraUBO {
     GPUCameraData cam;
 };
 
-layout(location = 0) rayPayloadEXT vec3 payload; // payload to pass into hit/miss shader
-
-// --------------- Hard coded origin, replace with camera logic
-vec34 origin = {0, 0, -2, 1};
+layout(location = 0) rayPayloadEXT vec3 payload;
 
 void main() {
-    ivec2 pixelCoord = ivec2(gl_LaunchIDEXT.xy);
-    ivec2 resolution = imageSize(image);
-    vec2 uv = (vec2(pixelCoord) + vec2(0.5)) / vec2(resolution); // pixel center
+    const ivec2 pixelCoord = ivec2(gl_LaunchIDEXT.xy);
+    const ivec2 resolution = imageSize(image);
+    const vec2 uv = (vec2(pixelCoord) + vec2(0.5)) / vec2(resolution);
 
-    // Compute pixel's world position on the image plane
-    vec3 pixelWorldPos =
+    const vec3 pixelWorldPos =
         cam.topLeftViewportCorner +
         uv.x * cam.horizontalViewportDelta +
         uv.y * cam.verticalViewportDelta;
 
-    // Perspective ray: from camera position toward pixel on viewport
-    // ---------------- Replace with camera position once implemented
-    vec3 rayOrigin = origin;
-    vec3 rayDirection = normalize(pixelWorldPos - cam.position);
+    const vec3 rayOrigin = cam.position;
+    const vec3 rayDirection = normalize(pixelWorldPos - rayOrigin);
 
-    // Initialize the payload
     payload = vec3(0.0);
 
-    // Shoot the ray
     traceRayEXT(
         topLevelAS,
         gl_RayFlagsOpaqueEXT,

@@ -24,6 +24,7 @@ import vulkan.memory.buffer;
 import vulkan.ray_tracing_pipeline;
 import vulkan.memory.image;
 import vulkan.raytracing.blas;
+import vulkan.raytracing.tlas;
 
 
 import scene.camera;
@@ -94,18 +95,21 @@ public:
 
         vk::Extent3D extent = { swapchain_->extent().width, swapchain_->extent().height, 1 };
 
-        vulkan::memory::Image storageImage(
+        vulkan::memory::Image outputImage(
                 device_->get(),
                 device_->physical(),
                 extent,
-                vk::Format::eR32G32B32A32Sfloat,
+                vk::Format::eR8G8B8A8Unorm,
                 vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc,
                 vk::ImageAspectFlagBits::eColor
         );
 
+        auto cmdImage = commandPool.getSingleUseBuffer();
+        vulkan::memory::Image::setImageLayout(*cmdImage, outputImage.getImage(), vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral);
+        commandPool.submitSingleUse(std::move(cmdImage), device_->computeQueue());
+        device_->get().waitIdle();
 
-
-        glm::vec3 cameraPosition{ 0.0f,0.0f,1.0f };
+        glm::vec3 cameraPosition{ 0.0f,0.0f,2.0f };
         glm::vec3   cameraLookAt{ 0.0f,0.0f,0.0f };
         glm::vec3       cameraUp{ 0.0f,1.0f,0.0f };
         float fovY = 90;
@@ -117,8 +121,8 @@ public:
 
         std::vector<glm::vec3> triangleVertices = {
                 { -0.5f, -0.5f, 0.0f },
-                {  0.5f, -0.5f, 0.0f },
-                {  0.0f,  0.5f, 0.0f }
+                {  0.0f,  0.5f, 0.0f },
+                {  0.5f, -0.5f, 0.0f }
         };
 
         vulkan::memory::Buffer vertexBuffer(
@@ -132,6 +136,7 @@ public:
         vertexBuffer.fill(triangleVertices.data(), sizeof(glm::vec3) * triangleVertices.size(), 0);
 
         vulkan::raytracing::BLAS triangleBLAS (*device_, commandPool, vertexBuffer.get(), 3, sizeof(glm::vec3));
+        vulkan::raytracing::TLAS myTLAS (*device_, commandPool, triangleBLAS);
 
 
         /* JUST FOR TESTING */
@@ -140,6 +145,7 @@ public:
         // Create the camera
 
         layout.addBinding(0, vk::DescriptorType::eStorageImage,  vk::ShaderStageFlagBits::eRaygenKHR); // image
+        layout.addBinding(1, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR);
         layout.addBinding(2, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR);  // camera
         layout.addBinding(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR); // vertex buffer
         layout.build();
@@ -148,13 +154,15 @@ public:
         std::vector<vk::DescriptorPoolSize> poolSizes = {
                 {vk::DescriptorType::eStorageImage, 1},
                 {vk::DescriptorType::eStorageBuffer, 1},
-                {vk::DescriptorType::eUniformBuffer, 1}
+                {vk::DescriptorType::eUniformBuffer, 1},
+                {vk::DescriptorType::eAccelerationStructureKHR, 1}
         };
 
         vulkan::memory::DescriptorPool pool(device_->get(), poolSizes, 3);
         vk::DescriptorSet set = pool.allocate(layout)[0];
 
-        pool.writeImage(set, 0, storageImage.getImageInfo(), vk::DescriptorType::eStorageImage);
+        pool.writeImage(set, 0, outputImage.getImageInfo(), vk::DescriptorType::eStorageImage);
+        pool.writeAccelerationStructure(set, 1, vk::DescriptorType::eAccelerationStructureKHR, myTLAS.get());
         pool.writeBuffer(set, 2, cameraBuffer, sizeof(scene::Camera::GPUCameraData), vk::DescriptorType::eUniformBuffer);
         pool.writeBuffer(set, 3, vertexBuffer.get(), sizeof(glm::vec3) * triangleVertices.size() , vk::DescriptorType::eStorageBuffer);
 
@@ -162,13 +170,43 @@ public:
 
         auto raytracePipeline = vulkan::RayTracingPipeline(*device_, descriptorLayouts, "shaders/spv/raygen.rgen.spv", "shaders/spv/miss.rmiss.spv", "shaders/spv/closesthit.rchit.spv");
 
-        while (!glfwWindowShouldClose(window_)) {
-            auto cmd = commandPool.getSingleUseBuffer();
-            //cmd->bindDescriptorSets(vk::PipelineBindPoint::eRayTracingKHR, raytracingPipelineLayout_, 0, sets, {});
-            //commandPool.submitSingleUse(std::move(cmd), device_->getGraphicsQueue());
+        int frame = 0;
+        uint32_t imageIndex = 0;
+        vk::UniqueSemaphore imageAcquiredSemaphore = device_->get().createSemaphoreUnique(vk::SemaphoreCreateInfo());
 
+        // Main Loop
+        while (!glfwWindowShouldClose(window_)) {
             glfwPollEvents();
-            // in the future: record & submit ray-tracing commands here
+
+            imageIndex = swapchain_->acquireNextImage(imageAcquiredSemaphore);
+
+            auto cmd = commandPool.getSingleUseBuffer();
+            cmd->bindPipeline(vk::PipelineBindPoint::eRayTracingKHR, raytracePipeline.get());
+            cmd->bindDescriptorSets(vk::PipelineBindPoint::eRayTracingKHR, raytracePipeline.getLayout(), 0, set, nullptr);
+            raytracePipeline.recordTraceRays(*cmd, extent);
+
+            vk::Image srcImage = outputImage.getImage();
+            vk::Image dstImage = swapchain_->getImage(imageIndex);
+            vulkan::memory::Image::setImageLayout(*cmd, srcImage, vk::ImageLayout::eGeneral, vk::ImageLayout::eTransferSrcOptimal);
+            vulkan::memory::Image::setImageLayout(*cmd, dstImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+            vulkan::memory::Image::copyImage(*cmd, srcImage, dstImage, extent);
+            vulkan::memory::Image::setImageLayout(*cmd, srcImage, vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eGeneral);
+            vulkan::memory::Image::setImageLayout(*cmd, dstImage, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::ePresentSrcKHR);
+
+            commandPool.submitSingleUse(std::move(cmd), device_->computeQueue());
+            device_->get().waitIdle();
+
+            vk::PresentInfoKHR presentInfo;
+            vk::SwapchainKHR swapchain = swapchain_->get();
+            std::vector<vk::SwapchainKHR> swapchains = { swapchain };
+            presentInfo.setSwapchains(swapchains);
+            presentInfo.setImageIndices(imageIndex);
+            presentInfo.setWaitSemaphores(*imageAcquiredSemaphore);
+            auto result = device_->presentQueue().presentKHR(presentInfo);
+            if (result != vk::Result::eSuccess) {
+                throw std::runtime_error("failed to present.");
+            }
+            device_->presentQueue().waitIdle();
         }
         core::log::info("Main loop exited");
     }
