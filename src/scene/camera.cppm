@@ -17,11 +17,11 @@ namespace scene {
 
 export class Camera {
 public:
-    struct GPUCameraData{
-        glm::vec3 position;
-        glm::vec3 topLeftViewportCorner;
-        glm::vec3 horizontalViewportDelta;
-        glm::vec3 verticalViewportDelta;
+    struct GPUCameraData{  // TODO research buffers and structs, and padding
+        glm::vec3 position;                float _pad0 = 0.0f;
+        glm::vec3 topLeftViewportCorner;   float _pad1 = 0.0f;
+        glm::vec3 horizontalViewportDelta; float _pad2 = 0.0f;
+        glm::vec3 verticalViewportDelta;   float _pad3 = 0.0f;
     };
 
     Camera(const vulkan::context::Device& device, float fovY, glm::vec3 position, glm::vec3 lookAt,
@@ -92,7 +92,7 @@ void Camera::updateGPUData() {
         GPUData_.position                = position_;
         GPUData_.horizontalViewportDelta = (2.0f * halfWidth * u) / float(pixelWidth_);
         GPUData_.verticalViewportDelta   = -(2.0f * halfHeight * v) / float(pixelHeight_);
-        GPUData_.topLeftViewportCorner   = position_ - (halfWidth * u) - (halfHeight * v) - w;
+        GPUData_.topLeftViewportCorner   = position_ - (halfWidth * u) + (halfHeight * v) - w;
 
         // Upload straight to buffer
         buffer_.fill(&GPUData_, sizeof(GPUData_), 0);

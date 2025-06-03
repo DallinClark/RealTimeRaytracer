@@ -6,10 +6,10 @@ layout(set = 0, binding = 0, rgba8) uniform image2D image;
 layout(set = 0, binding = 1) uniform accelerationStructureEXT topLevelAS;
 
 struct GPUCameraData {
-    vec3 position;
-    vec3 topLeftViewportCorner;
-    vec3 horizontalViewportDelta;
-    vec3 verticalViewportDelta;
+    vec3 position;               float _pad0;
+    vec3 topLeftViewportCorner; float _pad1;
+    vec3 horizontalViewportDelta; float _pad2;
+    vec3 verticalViewportDelta; float _pad3;
 };
 
 layout(set = 0, binding = 2) uniform CameraUBO {
@@ -20,15 +20,13 @@ layout(location = 0) rayPayloadEXT vec3 payload;
 
 void main() {
     const ivec2 pixelCoord = ivec2(gl_LaunchIDEXT.xy);
-    const ivec2 resolution = imageSize(image);
-    const vec2 uv = (vec2(pixelCoord) + vec2(0.5)) / vec2(resolution);
 
     const vec3 pixelWorldPos =
         cam.topLeftViewportCorner +
-        uv.x * cam.horizontalViewportDelta +
-        uv.y * cam.verticalViewportDelta;
+        pixelCoord.x * cam.horizontalViewportDelta +
+        pixelCoord.y * cam.verticalViewportDelta;
 
-    const vec3 rayOrigin = cam.position;
+    const vec3 rayOrigin = cam.position;  //cam.position;
     const vec3 rayDirection = normalize(pixelWorldPos - rayOrigin);
 
     payload = vec3(0.0);
@@ -43,5 +41,5 @@ void main() {
         0
     );
 
-    imageStore(image, pixelCoord, vec4(payload, 1.0));
+    imageStore(image, pixelCoord, vec4(payload.b, payload.g, payload.r, 1.0));
 }
