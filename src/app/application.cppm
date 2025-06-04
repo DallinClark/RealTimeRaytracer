@@ -25,6 +25,7 @@ import vulkan.ray_tracing_pipeline;
 import vulkan.memory.image;
 import vulkan.raytracing.blas;
 import vulkan.raytracing.tlas;
+import app.window;
 
 
 import scene.camera;
@@ -45,46 +46,41 @@ public:
         core::log::info("Starting application '{}'", title);
         vulkan::dispatch::init_loader();
 
-        // ---- GLFW window setup ----
-        if (!glfwInit()) {
-            core::log::error("Failed to initialise GLFW");
-            throw std::runtime_error("Failed to initialize GLFW");
-        }
-        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        window_ = glfwCreateWindow(static_cast<int>(width), static_cast<int>(height), title.data(), nullptr, nullptr);
-        if (!window_) {
-            glfwTerminate();
-            core::log::error("Failed to create GLFW window");
-            throw std::runtime_error("Failed to create GLFW window");
-        }
+        window_ = std::make_unique<app::Window>("Realtime Raytracer", width, height, MOUSE_SENSITIVITY);
         core::log::info("Window created ({}×{})", width, height);
 
         // ---- Vulkan context construction ----
         instance_  = std::make_unique<vulkan::context::Instance>(title, enableValidation);
         core::log::debug("Vulkan instance ready");
-        surface_   = std::make_unique<vulkan::context::Surface>(*instance_, window_);
+        surface_   = std::make_unique<vulkan::context::Surface>(*instance_, window_->get());
         core::log::debug("Surface created");
         device_    = std::make_unique<vulkan::context::Device>(*instance_, surface_->get(), enableValidation);
         core::log::debug("Logical device initialised");
         swapchain_ = std::make_unique<vulkan::context::Swapchain>(*device_, *surface_);
         core::log::debug("Swap-chain set up");
+
+        glm::vec3 initialCameraPosition{ 0.0f,0.0f,5.0f };
+        glm::vec3   initialCameraLookAt{ 0.0f,0.0f,0.0f };
+        glm::vec3              cameraUp{ 0.0f,1.0f,0.0f };
+        float fovY = 60;
+        int pixelWidth  = 800;
+        int pixelHeight = 600;
+
+        camera_ = std::make_unique<scene::Camera> (*device_, fovY, initialCameraPosition, initialCameraLookAt, cameraUp, pixelWidth, pixelHeight);
+        core::log::debug("Camera created");
+
+        window_->setCamera(camera_.get());
     }
 
     ~Application() {
         core::log::info("Shutting down application");
 
         // Destroy in reverse order of creation
+        camera_.reset();
         swapchain_.reset();
         device_.reset();
         surface_.reset();
         instance_.reset();
-
-        if (window_) {
-            glfwDestroyWindow(window_);
-            core::log::debug("Window destroyed");
-        }
-        glfwTerminate();
-        core::log::debug("GLFW terminated");
     }
 
     /// Simple event loop
@@ -95,47 +91,80 @@ public:
 
         vk::Extent3D extent = { swapchain_->extent().width, swapchain_->extent().height, 1 };
 
-        vulkan::memory::Image outputImage(
-                device_->get(),
-                device_->physical(),
-                extent,
-                vk::Format::eR8G8B8A8Unorm,
-                vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc,
-                vk::ImageAspectFlagBits::eColor
-        );
+        vulkan::memory::Image outputImage(device_->get(), device_->physical(), extent,
+                vk::Format::eR8G8B8A8Unorm, vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc, vk::ImageAspectFlagBits::eColor);
 
-        auto cmdImage = commandPool.getSingleUseBuffer();
+        auto cmdImage = commandPool.getSingleUseBuffer(); // TODO maybe wrap this a bit better
         vulkan::memory::Image::setImageLayout(*cmdImage, outputImage.getImage(), vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral);
         commandPool.submitSingleUse(std::move(cmdImage), device_->computeQueue());
         device_->get().waitIdle();
 
-        glm::vec3 cameraPosition{ 0.0f,0.0f,2.0f };
-        glm::vec3   cameraLookAt{ 0.0f,0.0f,0.0f };
-        glm::vec3       cameraUp{ 0.0f,1.0f,0.0f };
-        float fovY = 90;
-        int pixelWidth  = 800;
-        int pixelHeight = 600;
+        vk::Buffer cameraBuffer = camera_->getBuffer();
 
-        scene::Camera camera(*device_, fovY, cameraPosition, cameraLookAt, cameraUp, pixelWidth, pixelHeight);
-        vk::Buffer cameraBuffer = camera.getBuffer();
+        std::vector<glm::vec3> vertices = {
+                {-0.5f, -0.5f, 0.0f}, // bottom left front 0
+                {-0.5f, 0.5f,  0.0f}, // top left front 1
+                {0.5f,  0.5f,  0.0f}, // top right front 2
+                {0.5f,  -0.5f, 0.0f}, // bottom right front 3
+                {-0.5f, -0.5f, -1.0f}, // bottom left back 4
+                {-0.5f, 0.5f,  -1.0f}, // top left back 5
+                {0.5f,  0.5f,  -1.0f}, // top right back 6
+                {0.5f,  -0.5f, -1.0f} // bottom right back 7
+        };
+        std::vector<uint32_t> indices = {
+                // Front face
+                0, 1, 2,
+                0, 2, 3,
 
-        std::vector<glm::vec3> triangleVertices = {
-                { -0.5f, -0.5f, 0.0f },
-                {  0.0f,  0.5f, 0.0f },
-                {  0.5f, -0.5f, 0.0f }
+                // Back face
+                4, 6, 5,
+                4, 7, 6,
+
+                // Left face
+                0, 5, 1,
+                0, 4, 5,
+
+                // Right face
+                3, 2, 6,
+                3, 6, 7,
+
+                // Top face
+                1, 5, 6,
+                1, 6, 2,
+
+                // Bottom face
+                0, 3, 4,
+                3, 7, 4
         };
 
-        vulkan::memory::Buffer vertexBuffer(
-                *device_,
-                sizeof(glm::vec3) * triangleVertices.size(),
-                vk::BufferUsageFlagBits::eStorageBuffer |
-                vk::BufferUsageFlagBits::eShaderDeviceAddress |
-                vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR,
-                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
-        );
-        vertexBuffer.fill(triangleVertices.data(), sizeof(glm::vec3) * triangleVertices.size(), 0);
 
-        vulkan::raytracing::BLAS triangleBLAS (*device_, commandPool, vertexBuffer.get(), 3, sizeof(glm::vec3));
+        vk::DeviceSize vertexSize = vertices.size() * sizeof(glm::vec3);
+        vk::DeviceSize indexSize  = indices.size() * sizeof(uint32_t);
+
+        // THIS MAY NEED TO BE ALLIGNED, NOT SURE
+        vk::DeviceSize vertexOffset = 0;
+        vk::DeviceSize indexOffset  = vertexOffset + vertexSize;
+
+        vk::DeviceSize totalSize = vertexOffset + vertexSize + indexSize;
+
+        std::vector<vulkan::memory::Buffer::FillRegion> objectDataRegions {
+                {vertices.data() , vertexSize, vertexOffset},
+                {indices.data(), indexSize, indexOffset}
+        };
+
+        vulkan::memory::Buffer objectBuffer = vulkan::memory::Buffer::createDeviceLocalBuffer(commandPool, *device_, totalSize, vk::BufferUsageFlagBits::eVertexBuffer |
+                vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress | vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR |
+                vk::BufferUsageFlagBits::eTransferDst, objectDataRegions);
+//
+        vk::DeviceAddress baseAddress = objectBuffer.getAddress();
+
+        vk::DeviceAddress vertexAddress = baseAddress + vertexOffset;
+        vk::DeviceAddress indexAddress  = baseAddress + indexOffset;
+        uint32_t vertexCount = vertices.size();
+        vk::DeviceSize vertexStride = sizeof(glm::vec3);
+        uint32_t indexCount = indices.size();
+
+        vulkan::raytracing::BLAS triangleBLAS (*device_, commandPool, vertexAddress, indexAddress, vertexCount, vertexStride, indexCount, vk::IndexType::eUint32);
         vulkan::raytracing::TLAS myTLAS (*device_, commandPool, triangleBLAS);
 
 
@@ -147,13 +176,13 @@ public:
         layout.addBinding(0, vk::DescriptorType::eStorageImage,  vk::ShaderStageFlagBits::eRaygenKHR); // image
         layout.addBinding(1, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR);
         layout.addBinding(2, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR);  // camera
-        layout.addBinding(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR); // vertex buffer
+        //layout.addBinding(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR); // vertex buffer
         layout.build();
 
         // We need this to happen automatically based off of needs
         std::vector<vk::DescriptorPoolSize> poolSizes = {
                 {vk::DescriptorType::eStorageImage, 1},
-                {vk::DescriptorType::eStorageBuffer, 1},
+                //{vk::DescriptorType::eStorageBuffer, 1},
                 {vk::DescriptorType::eUniformBuffer, 1},
                 {vk::DescriptorType::eAccelerationStructureKHR, 1}
         };
@@ -164,19 +193,26 @@ public:
         pool.writeImage(set, 0, outputImage.getImageInfo(), vk::DescriptorType::eStorageImage);
         pool.writeAccelerationStructure(set, 1, vk::DescriptorType::eAccelerationStructureKHR, myTLAS.get());
         pool.writeBuffer(set, 2, cameraBuffer, sizeof(scene::Camera::GPUCameraData), vk::DescriptorType::eUniformBuffer);
-        pool.writeBuffer(set, 3, vertexBuffer.get(), sizeof(glm::vec3) * triangleVertices.size() , vk::DescriptorType::eStorageBuffer);
+        //pool.writeBuffer(set, 3, object.get(), sizeof(glm::vec3) * triangleVertices.size() , vk::DescriptorType::eStorageBuffer);
 
         std::vector<vk::DescriptorSetLayout> descriptorLayouts{layout.get()};
 
         auto raytracePipeline = vulkan::RayTracingPipeline(*device_, descriptorLayouts, "shaders/spv/raygen.rgen.spv", "shaders/spv/miss.rmiss.spv", "shaders/spv/closesthit.rchit.spv");
 
         int frame = 0;
+        float currentTime = window_->getTime();
         uint32_t imageIndex = 0;
         vk::UniqueSemaphore imageAcquiredSemaphore = device_->get().createSemaphoreUnique(vk::SemaphoreCreateInfo());
 
         // Main Loop
-        while (!glfwWindowShouldClose(window_)) {
+        while (!window_->shouldClose()) {
+            float newTime = window_->getTime();
+            float frameTime = newTime - currentTime;
+            currentTime = newTime;
+
+            camera_->updateGPUData();
             glfwPollEvents();
+            window_->processInput(newTime, CAM_SPEED);
 
             imageIndex = swapchain_->acquireNextImage(imageAcquiredSemaphore);
 
@@ -214,12 +250,16 @@ public:
 
 
 private:
-    GLFWwindow* window_{nullptr};
+    std::unique_ptr<app::Window>   window_{nullptr};
+    std::unique_ptr<scene::Camera> camera_{nullptr};
 
     std::unique_ptr<vulkan::context::Instance>  instance_;
     std::unique_ptr<vulkan::context::Surface>   surface_;
     std::unique_ptr<vulkan::context::Device>    device_;
     std::unique_ptr<vulkan::context::Swapchain> swapchain_;
+
+    float CAM_SPEED = 0.01f;
+    float MOUSE_SENSITIVITY = 0.5f;
 };
 
 } // namespace app
