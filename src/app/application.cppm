@@ -2,6 +2,7 @@ module;
 
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
+#include <tiny_obj_loader.h>
 
 #include <GLFW/glfw3.h>
 #include <iostream>
@@ -27,6 +28,7 @@ import vulkan.raytracing.blas;
 import vulkan.raytracing.tlas;
 import app.window;
 
+import core.file;
 
 import scene.camera;
 import scene.geometry.vertex;
@@ -59,12 +61,12 @@ public:
         swapchain_ = std::make_unique<vulkan::context::Swapchain>(*device_, *surface_);
         core::log::debug("Swap-chain set up");
 
-        glm::vec3 initialCameraPosition{ 0.0f,0.0f,5.0f };
+        glm::vec3 initialCameraPosition{ -50.0f,100.0f,20.0f };
         glm::vec3   initialCameraLookAt{ 0.0f,0.0f,0.0f };
         glm::vec3              cameraUp{ 0.0f,1.0f,0.0f };
         float fovY = 60;
-        int pixelWidth  = 800;
-        int pixelHeight = 600;
+        int pixelWidth  = 1600;
+        int pixelHeight = 1200;
 
         camera_ = std::make_unique<scene::Camera> (*device_, fovY, initialCameraPosition, initialCameraLookAt, cameraUp, pixelWidth, pixelHeight);
         core::log::debug("Camera created");
@@ -101,71 +103,49 @@ public:
 
         vk::Buffer cameraBuffer = camera_->getBuffer();
 
-        std::vector<glm::vec3> vertices = {
-                {-0.5f, -0.5f, 0.0f}, // bottom left front 0
-                {-0.5f, 0.5f,  0.0f}, // top left front 1
-                {0.5f,  0.5f,  0.0f}, // top right front 2
-                {0.5f,  -0.5f, 0.0f}, // bottom right front 3
-                {-0.5f, -0.5f, -1.0f}, // bottom left back 4
-                {-0.5f, 0.5f,  -1.0f}, // top left back 5
-                {0.5f,  0.5f,  -1.0f}, // top right back 6
-                {0.5f,  -0.5f, -1.0f} // bottom right back 7
-        };
-        std::vector<uint32_t> indices = {
-                // Front face
-                0, 1, 2,
-                0, 2, 3,
+        std::vector<glm::vec3> vertexPositions{};
+        std::vector<uint32_t> indices{};
+        std::vector<scene::geometry::Vertex> vertices{};
+        core::file::loadModel("../../assets/objects/bobo.obj", vertexPositions, indices, vertices);
 
-                // Back face
-                4, 6, 5,
-                4, 7, 6,
-
-                // Left face
-                0, 5, 1,
-                0, 4, 5,
-
-                // Right face
-                3, 2, 6,
-                3, 6, 7,
-
-                // Top face
-                1, 5, 6,
-                1, 6, 2,
-
-                // Bottom face
-                0, 3, 4,
-                3, 7, 4
-        };
-
-
-        vk::DeviceSize vertexSize = vertices.size() * sizeof(glm::vec3);
+        vk::DeviceSize vertexSize = vertexPositions.size() * sizeof(glm::vec3);
         vk::DeviceSize indexSize  = indices.size() * sizeof(uint32_t);
 
-        // THIS MAY NEED TO BE ALLIGNED, NOT SURE
         vk::DeviceSize vertexOffset = 0;
         vk::DeviceSize indexOffset  = vertexOffset + vertexSize;
 
         vk::DeviceSize totalSize = vertexOffset + vertexSize + indexSize;
 
         std::vector<vulkan::memory::Buffer::FillRegion> objectDataRegions {
-                {vertices.data() , vertexSize, vertexOffset},
+                {vertexPositions.data() , vertexSize, vertexOffset},
                 {indices.data(), indexSize, indexOffset}
         };
 
+        //create vertex and index buffer
         vulkan::memory::Buffer objectBuffer = vulkan::memory::Buffer::createDeviceLocalBuffer(commandPool, *device_, totalSize, vk::BufferUsageFlagBits::eVertexBuffer |
                 vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress | vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR |
                 vk::BufferUsageFlagBits::eTransferDst, objectDataRegions);
-//
+
         vk::DeviceAddress baseAddress = objectBuffer.getAddress();
 
         vk::DeviceAddress vertexAddress = baseAddress + vertexOffset;
         vk::DeviceAddress indexAddress  = baseAddress + indexOffset;
-        uint32_t vertexCount = vertices.size();
+        uint32_t vertexCount = vertexPositions.size();
         vk::DeviceSize vertexStride = sizeof(glm::vec3);
         uint32_t indexCount = indices.size();
 
+        // create acceleration structures
         vulkan::raytracing::BLAS triangleBLAS (*device_, commandPool, vertexAddress, indexAddress, vertexCount, vertexStride, indexCount, vk::IndexType::eUint32);
         vulkan::raytracing::TLAS myTLAS (*device_, commandPool, triangleBLAS);
+
+        // create shader vertex buffer
+        vk::DeviceSize verticesSize = sizeof(scene::geometry::Vertex) * vertices.size();
+        std::vector<vulkan::memory::Buffer::FillRegion> vertexDataRegions {
+                {vertices.data() , verticesSize, 0},
+        };
+        vulkan::memory::Buffer vertexBuffer = vulkan::memory::Buffer::createDeviceLocalBuffer(commandPool, *device_, verticesSize,
+                                              vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress
+                                              | vk::BufferUsageFlagBits::eTransferDst, vertexDataRegions);
 
 
         /* JUST FOR TESTING */
@@ -174,15 +154,15 @@ public:
         // Create the camera
 
         layout.addBinding(0, vk::DescriptorType::eStorageImage,  vk::ShaderStageFlagBits::eRaygenKHR); // image
-        layout.addBinding(1, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR);
+        layout.addBinding(1, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR);  // TLAS
         layout.addBinding(2, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR);  // camera
-        //layout.addBinding(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR); // vertex buffer
+        layout.addBinding(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR); // vertex buffer
         layout.build();
 
         // We need this to happen automatically based off of needs
         std::vector<vk::DescriptorPoolSize> poolSizes = {
                 {vk::DescriptorType::eStorageImage, 1},
-                //{vk::DescriptorType::eStorageBuffer, 1},
+                {vk::DescriptorType::eStorageBuffer, 1},
                 {vk::DescriptorType::eUniformBuffer, 1},
                 {vk::DescriptorType::eAccelerationStructureKHR, 1}
         };
@@ -193,7 +173,7 @@ public:
         pool.writeImage(set, 0, outputImage.getImageInfo(), vk::DescriptorType::eStorageImage);
         pool.writeAccelerationStructure(set, 1, vk::DescriptorType::eAccelerationStructureKHR, myTLAS.get());
         pool.writeBuffer(set, 2, cameraBuffer, sizeof(scene::Camera::GPUCameraData), vk::DescriptorType::eUniformBuffer);
-        //pool.writeBuffer(set, 3, object.get(), sizeof(glm::vec3) * triangleVertices.size() , vk::DescriptorType::eStorageBuffer);
+        pool.writeBuffer(set, 3, vertexBuffer.get(), sizeof(scene::geometry::Vertex) * vertices.size() , vk::DescriptorType::eStorageBuffer);
 
         std::vector<vk::DescriptorSetLayout> descriptorLayouts{layout.get()};
 
@@ -258,7 +238,7 @@ private:
     std::unique_ptr<vulkan::context::Device>    device_;
     std::unique_ptr<vulkan::context::Swapchain> swapchain_;
 
-    float CAM_SPEED = 0.01f;
+    float CAM_SPEED = 0.4f;
     float MOUSE_SENSITIVITY = 0.5f;
 };
 
