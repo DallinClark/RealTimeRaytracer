@@ -26,7 +26,7 @@ void main() {
         pixelCoord.x * cam.horizontalViewportDelta +
         pixelCoord.y * cam.verticalViewportDelta;
 
-    const vec3 rayOrigin = cam.position;  //cam.position;
+    const vec3 rayOrigin = cam.position;
     const vec3 rayDirection = normalize(pixelWorldPos - rayOrigin);
 
     payload = vec3(0.0);
