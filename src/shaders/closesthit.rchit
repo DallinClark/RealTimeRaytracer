@@ -1,14 +1,31 @@
 #version 460
 #extension GL_EXT_ray_tracing : require
+#extension GL_EXT_nonuniform_qualifier : enable
+#extension GL_EXT_scalar_block_layout : enable
+#extension GL_GOOGLE_include_directive : enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_buffer_reference2 : require
 
 layout(location = 0) rayPayloadInEXT vec3 payload;
+layout(location = 1) rayPayloadEXT bool isShadowed;
 
-hitAttributeEXT vec3 attribs;
+hitAttributeEXT vec2 attribs;
 
 struct Vertex {
     vec3 position; float pad0;
     vec3 normal;   float pad1;
     vec2 uv;       vec2  pad2;
+};
+
+struct GPUCameraData {
+    vec3 position;               float _pad0;
+    vec3 topLeftViewportCorner; float _pad1;
+    vec3 horizontalViewportDelta; float _pad2;
+    vec3 verticalViewportDelta; float _pad3;
+};
+
+layout(set = 0, binding = 2) uniform CameraUBO {
+    GPUCameraData cam;
 };
 
 layout(set = 0, binding = 3) readonly buffer VertexBuffer {
@@ -18,21 +35,62 @@ layout(set = 0, binding = 3) readonly buffer VertexBuffer {
 layout(set = 0, binding = 4) readonly buffer IndexBuffer {
     uint indices[];
 };
+
+layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
+
 layout(set = 0, binding = 5) uniform sampler2D texSampler;
 
 void main() {
-    uint vertIndex0 = indices[3 * gl_PrimitiveID  + 0];
-    uint vertIndex1 = indices[3 * gl_PrimitiveID  + 1];
-    uint vertIndex2 = indices[3 * gl_PrimitiveID  + 2];
+    // Get triangle indices
+    uint index0 = indices[3 * gl_PrimitiveID + 0];
+    uint index1 = indices[3 * gl_PrimitiveID + 1];
+    uint index2 = indices[3 * gl_PrimitiveID + 2];
 
-    Vertex v0 = vertices[vertIndex0];
-    Vertex v1 = vertices[vertIndex1];
-    Vertex v2 = vertices[vertIndex2];
+    // Get vertices
+    Vertex v0 = vertices[index0];
+    Vertex v1 = vertices[index1];
+    Vertex v2 = vertices[index2];
 
+    // Compute barycentrics
+    vec3 bary = vec3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
+
+    // Interpolate position and normals
+    vec3 localPos = v0.position * bary.x + v1.position * bary.y + v2.position * bary.z;
+    vec3 worldPos = vec3(gl_ObjectToWorldEXT * vec4(localPos, 1.0));
+    vec3 interpolatedLocalNormal = normalize(v0.normal * bary.x + v1.normal * bary.y + v2.normal * bary.z);
+    vec3 interpolatedWorldNormal = normalize(mat3(gl_ObjectToWorldEXT) * interpolatedLocalNormal);
     const vec3 barycentricCoords = vec3(1.0f - attribs.x - attribs.y, attribs.x, attribs.y);
     vec2 uv = v0.uv * barycentricCoords.x + v1.uv * barycentricCoords.y + v2.uv * barycentricCoords.z;
 
-    vec3 color = texture(texSampler, uv).rgb;
 
-    payload = texture(texSampler, uv).rgb;
+    // ----------------------------Hardcoded Light--------------------
+    vec3 lightColor = vec3(1.0, 0.95, 0.9);
+    float lightIntensity = 1.0;
+    vec3 lightDir = normalize(vec3(-1, 3, 0));
+
+    // Calculate light direction and view direction
+    vec3 viewDir = normalize(cam.position - worldPos);
+
+    // Base object color
+    vec3 baseColor = texture(texSampler, uv).rgb;
+
+
+    // Ambient term
+    vec3 ambientColor = vec3(0.1, 0.1, 0.1);
+
+    // Diffuse term (Lambert)
+    float diff = max(dot(interpolatedWorldNormal, lightDir), 0.0);
+
+    // Specular term (Phong)
+    vec3 reflectDir = reflect(-lightDir, interpolatedWorldNormal);
+    float specStrength = 0.5; // Specular intensity
+    float shininess = 32.0;   // Shininess exponent
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess);
+
+    // Combine terms
+    vec3 color = ambientColor * baseColor +
+    diff * baseColor * lightColor * lightIntensity +
+    spec * specStrength * lightColor * lightIntensity;
+
+    payload = color;
 }
