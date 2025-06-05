@@ -101,14 +101,34 @@ public:
         commandPool.submitSingleUse(std::move(cmdImage), device_->computeQueue());
         device_->get().waitIdle();
 
-        auto textureImage = core::file::createTextureImage(*device_.get(), "../../assets/textures/statue-1275469_1280.jpg", commandPool);
+        auto textureImage = core::file::createTextureImage(*device_.get(), "../../assets/textures/statue-1275469_1280.jpg", commandPool); // TODO wrap all texture stuff in a class
+        vk::UniqueSampler texSampler;
+        vk::SamplerCreateInfo samplerCreateInfo{};
+        samplerCreateInfo.setMagFilter(vk::Filter::eLinear);
+        samplerCreateInfo.setMinFilter(vk::Filter::eLinear);
+        samplerCreateInfo.setAddressModeU(vk::SamplerAddressMode::eRepeat);
+        samplerCreateInfo.setAddressModeV(vk::SamplerAddressMode::eRepeat);
+        samplerCreateInfo.setAddressModeW(vk::SamplerAddressMode::eRepeat);
+        samplerCreateInfo.setAnisotropyEnable(vk::True);
+
+        vk::PhysicalDeviceProperties propertiesPhysical = device_->physical().getProperties();
+        samplerCreateInfo.setMaxAnisotropy(propertiesPhysical.limits.maxSamplerAnisotropy);
+        samplerCreateInfo.setBorderColor(vk::BorderColor::eFloatOpaqueBlack);
+        samplerCreateInfo.setUnnormalizedCoordinates(vk::False);
+        samplerCreateInfo.setCompareEnable(vk::False);
+        samplerCreateInfo.setCompareOp(vk::CompareOp::eAlways);
+        samplerCreateInfo.setMipmapMode(vk::SamplerMipmapMode::eLinear);
+        samplerCreateInfo.setMipLodBias(0.0f);
+        samplerCreateInfo.setMinLod(0.0f);
+        samplerCreateInfo.setMaxLod(0.0f);
+        texSampler = device_->get().createSamplerUnique(samplerCreateInfo);
 
         vk::Buffer cameraBuffer = camera_->getBuffer();
 
         std::vector<glm::vec3> vertexPositions{};
         std::vector<uint32_t> indices{};
         std::vector<scene::geometry::Vertex> vertices{};
-        core::file::loadModel("../../assets/objects/bobo.obj", vertexPositions, indices, vertices);
+        core::file::loadModel("../../assets/objects/cube.obj", vertexPositions, indices, vertices);
 
         vk::DeviceSize vertexSize = vertexPositions.size() * sizeof(glm::vec3);
         vk::DeviceSize indexSize  = indices.size() * sizeof(uint32_t);
@@ -168,6 +188,7 @@ public:
         layout.addBinding(2, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR);  // camera
         layout.addBinding(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR); // vertex buffer
         layout.addBinding(4, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR);
+        layout.addBinding(5, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eClosestHitKHR);
         layout.build();
 
         // We need this to happen automatically based off of needs
@@ -175,7 +196,8 @@ public:
                 {vk::DescriptorType::eStorageImage, 1},
                 {vk::DescriptorType::eStorageBuffer, 2},
                 {vk::DescriptorType::eUniformBuffer, 1},
-                {vk::DescriptorType::eAccelerationStructureKHR, 1}
+                {vk::DescriptorType::eAccelerationStructureKHR, 1},
+                {vk::DescriptorType::eCombinedImageSampler, 1}
         };
 
         vulkan::memory::DescriptorPool pool(device_->get(), poolSizes, 3);
@@ -188,6 +210,7 @@ public:
         pool.writeBuffer(set, 2, cameraBuffer, sizeof(scene::Camera::GPUCameraData), vk::DescriptorType::eUniformBuffer, 0);
         pool.writeBuffer(set, 3, vertexBuffer.get(), sizeof(scene::geometry::Vertex) * vertices.size() , vk::DescriptorType::eStorageBuffer, 0);
         pool.writeBuffer(set, 4, indexBuffer.get(), indexSize, vk::DescriptorType::eStorageBuffer, 0);
+        pool.writeImage(set, 5, textureImage->getImageInfoWithSampler(texSampler.get()), vk::DescriptorType::eCombinedImageSampler);
 
         std::vector<vk::DescriptorSetLayout> descriptorLayouts{layout.get()};
 

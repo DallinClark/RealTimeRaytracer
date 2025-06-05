@@ -16,6 +16,7 @@ namespace vulkan::memory {
         vk::Extent3D getExtent() const noexcept { return extent_; }
         vk::Format getFormat() const noexcept { return format_; }
         vk::DescriptorImageInfo getImageInfo();
+        vk::DescriptorImageInfo getImageInfoWithSampler(vk::Sampler sampler);
 
         static vk::AccessFlags toAccessFlags(vk::ImageLayout layout);
 
@@ -85,7 +86,7 @@ namespace vulkan::memory {
         device_.bindImageMemory(image_.get(), memory_.get(), 0);
 
         // Create view
-        vk::ImageViewCreateInfo viewInfo{};
+        vk::ImageViewCreateInfo viewInfo{}; // TODO I don't think we need this for all images
         viewInfo.image = image_.get();
         viewInfo.viewType = vk::ImageViewType::e2D;
         viewInfo.format = format;
@@ -106,6 +107,15 @@ namespace vulkan::memory {
 
         return imageInfo;
     };
+
+    vk::DescriptorImageInfo Image::getImageInfoWithSampler(vk::Sampler sampler) {
+        vk::DescriptorImageInfo imageInfo{};
+        imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal; // required for textures
+        imageInfo.imageView = view_.get();
+        imageInfo.sampler = sampler; // not needed for storage images
+
+        return imageInfo;
+    }
 
     void Image::setImageLayout(vk::CommandBuffer& commandBuffer, const vk::Image& image,const vk::ImageLayout& oldLayout,const vk::ImageLayout& newLayout) {
         vk::ImageMemoryBarrier barrier;

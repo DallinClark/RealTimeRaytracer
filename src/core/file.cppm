@@ -92,7 +92,7 @@ export namespace core::file {
         }
     }
 
-    std::unique_ptr<vulkan::memory::Image> createTextureImage(const vulkan::context::Device& device, const std::string& texturePath, const vulkan::context::CommandPool& pool) {
+    std::unique_ptr<vulkan::memory::Image> createTextureImage(const vulkan::context::Device& device, const std::string& texturePath, vulkan::context::CommandPool& pool) {
         auto cmd = pool.getSingleUseBuffer();
 
         int texWidth, texHeight, texChannels;

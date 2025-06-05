@@ -195,6 +195,7 @@ inline Device::Device(
     auto layerNames    = std::vector<const char*>{};
     auto extensionNames = requiredExtensions();
     vk::PhysicalDeviceFeatures deviceFeatures{};
+    deviceFeatures.setSamplerAnisotropy(vk::True);
 
     // Fill device-create info
     vk::DeviceCreateInfo info {};

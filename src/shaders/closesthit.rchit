@@ -18,6 +18,7 @@ layout(set = 0, binding = 3) readonly buffer VertexBuffer {
 layout(set = 0, binding = 4) readonly buffer IndexBuffer {
     uint indices[];
 };
+layout(set = 0, binding = 5) uniform sampler2D texSampler;
 
 void main() {
     uint vertIndex0 = indices[3 * gl_PrimitiveID  + 0];
@@ -29,7 +30,9 @@ void main() {
     Vertex v2 = vertices[vertIndex2];
 
     const vec3 barycentricCoords = vec3(1.0f - attribs.x - attribs.y, attribs.x, attribs.y);
-    const vec3 position = v0.position * barycentricCoords.x + v1.position * barycentricCoords.y + v2.position * barycentricCoords.z;
+    vec2 uv = v0.uv * barycentricCoords.x + v1.uv * barycentricCoords.y + v2.uv * barycentricCoords.z;
 
-    payload = vec3(position.x,0.0,0.0);//clamp(position,0.0,1.0);
+    vec3 color = texture(texSampler, uv).rgb;
+
+    payload = texture(texSampler, uv).rgb;
 }
