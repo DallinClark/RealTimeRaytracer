@@ -74,23 +74,24 @@ void main() {
     // Base object color
     vec3 baseColor = texture(texSampler, uv).rgb;
 
-
     // Ambient term
-    vec3 ambientColor = vec3(0.1, 0.1, 0.1);
+    vec3 ambientColor = vec3(0.2, 0.2, 0.2);
 
     // Diffuse term (Lambert)
     float diff = max(dot(interpolatedWorldNormal, lightDir), 0.0);
 
     // Specular term (Phong)
     vec3 reflectDir = reflect(-lightDir, interpolatedWorldNormal);
-    float specStrength = 0.5; // Specular intensity
-    float shininess = 32.0;   // Shininess exponent
+    float specStrength = 0.3; // Specular intensity
+    float shininess = 12.0;   // Shininess exponent
     float spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess);
 
     // Combine terms
     vec3 color = ambientColor * baseColor +
     diff * baseColor * lightColor * lightIntensity +
     spec * specStrength * lightColor * lightIntensity;
+
+    //payload = interpolatedWorldNormal * 0.5 + 0.5;
 
     payload = color;
 }

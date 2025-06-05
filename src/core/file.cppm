@@ -94,6 +94,7 @@ export namespace core::file {
 
     std::unique_ptr<vulkan::memory::Image> createTextureImage(const vulkan::context::Device& device, const std::string& texturePath, vulkan::context::CommandPool& pool) {
         auto cmd = pool.getSingleUseBuffer();
+        stbi_set_flip_vertically_on_load(true);
 
         int texWidth, texHeight, texChannels;
         stbi_uc *pixels = stbi_load(texturePath.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);

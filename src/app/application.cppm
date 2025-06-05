@@ -101,7 +101,7 @@ public:
         commandPool.submitSingleUse(std::move(cmdImage), device_->computeQueue());
         device_->get().waitIdle();
 
-        auto textureImage = core::file::createTextureImage(*device_.get(), "../../assets/textures/statue-1275469_1280.jpg", commandPool); // TODO wrap all texture stuff in a class
+        auto textureImage = core::file::createTextureImage(*device_.get(), "../../assets/textures/pig_head_tex.jpg", commandPool); // TODO wrap all texture stuff in a class
         vk::UniqueSampler texSampler;
         vk::SamplerCreateInfo samplerCreateInfo{};
         samplerCreateInfo.setMagFilter(vk::Filter::eLinear);
@@ -128,7 +128,7 @@ public:
         std::vector<glm::vec3> vertexPositions{};
         std::vector<uint32_t> indices{};
         std::vector<scene::geometry::Vertex> vertices{};
-        core::file::loadModel("../../assets/objects/cube.obj", vertexPositions, indices, vertices);
+        core::file::loadModel("../../assets/objects/pig_head.obj", vertexPositions, indices, vertices);
 
         vk::DeviceSize vertexSize = vertexPositions.size() * sizeof(glm::vec3);
         vk::DeviceSize indexSize  = indices.size() * sizeof(uint32_t);
@@ -185,7 +185,7 @@ public:
 
         layout.addBinding(0, vk::DescriptorType::eStorageImage,  vk::ShaderStageFlagBits::eRaygenKHR); // image
         layout.addBinding(1, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR);  // TLAS
-        layout.addBinding(2, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR);  // camera
+        layout.addBinding(2, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR);  // camera
         layout.addBinding(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR); // vertex buffer
         layout.addBinding(4, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR);
         layout.addBinding(5, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eClosestHitKHR);
@@ -275,7 +275,7 @@ private:
     std::unique_ptr<vulkan::context::Device>    device_;
     std::unique_ptr<vulkan::context::Swapchain> swapchain_;
 
-    float CAM_SPEED = 0.4f;
+    float CAM_SPEED = 0.02f;
     float MOUSE_SENSITIVITY = 0.5f;
 };
 
