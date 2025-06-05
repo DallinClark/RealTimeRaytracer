@@ -52,15 +52,14 @@ void main() {
     Vertex v2 = vertices[index2];
 
     // Compute barycentrics
-    vec3 bary = vec3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
+    const vec3 bary = vec3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
 
     // Interpolate position and normals
     vec3 localPos = v0.position * bary.x + v1.position * bary.y + v2.position * bary.z;
     vec3 worldPos = vec3(gl_ObjectToWorldEXT * vec4(localPos, 1.0));
     vec3 interpolatedLocalNormal = normalize(v0.normal * bary.x + v1.normal * bary.y + v2.normal * bary.z);
     vec3 interpolatedWorldNormal = normalize(mat3(gl_ObjectToWorldEXT) * interpolatedLocalNormal);
-    const vec3 barycentricCoords = vec3(1.0f - attribs.x - attribs.y, attribs.x, attribs.y);
-    vec2 uv = v0.uv * barycentricCoords.x + v1.uv * barycentricCoords.y + v2.uv * barycentricCoords.z;
+    vec2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
 
 
     // ----------------------------Hardcoded Light--------------------
