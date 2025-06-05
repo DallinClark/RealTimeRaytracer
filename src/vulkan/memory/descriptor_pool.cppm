@@ -18,7 +18,7 @@ public:
             uint32_t maxSets
     );
 
-    void writeBuffer(vk::DescriptorSet set, uint32_t binding, vk::Buffer buffer, vk::DeviceSize size, vk::DescriptorType type = vk::DescriptorType::eUniformBuffer);
+    void writeBuffer(vk::DescriptorSet set, uint32_t binding, vk::Buffer buffer, vk::DeviceSize size, vk::DescriptorType type, vk::DeviceSize offset);
 
     void writeImage(vk::DescriptorSet set, uint32_t binding, const vk::DescriptorImageInfo& imageInfo, vk::DescriptorType type);
 
@@ -103,7 +103,7 @@ std::vector<vk::DescriptorSet> DescriptorPool::allocate(const DescriptorSetLayou
 }
 
 // TODO maybe move this out of pool, or combine into one function
-void DescriptorPool::writeBuffer(vk::DescriptorSet set, uint32_t binding, vk::Buffer buffer, vk::DeviceSize size, vk::DescriptorType type) {
+void DescriptorPool::writeBuffer(vk::DescriptorSet set, uint32_t binding, vk::Buffer buffer, vk::DeviceSize size, vk::DescriptorType type, vk::DeviceSize offset) {
     vk::DescriptorBufferInfo bufferInfo{ buffer, 0, size };
     vk::WriteDescriptorSet write{
             set, binding, 0, 1, type, nullptr, &bufferInfo, nullptr

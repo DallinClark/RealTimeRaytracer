@@ -162,6 +162,7 @@ add_executable(${PROJECT_NAME}
         src/vulkan/memory/image.cppm
         src/vulkan/raytracing/blas.cppm
         src/vulkan/raytracing/tlas.cppm
+        external/stb/stb_image.h
 )
 
 # --- MODULE SUPPORT -----------------------------------------
@@ -185,6 +186,7 @@ if(TARGET Vulkan::Vulkan AND NOT Vulkan_FOUND)
     )
 endif()
 
+target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/external/stb)
 # Add tinyobjloader subdirectory
 add_subdirectory(external/tinyobjloader)
 

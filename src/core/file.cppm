@@ -6,9 +6,17 @@ module;
 #include <stdexcept>
 #include <tiny_obj_loader.h>
 #include <glm/glm.hpp>
+#include <vulkan/vulkan.hpp>
 #include <unordered_map>
 
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
+
 import scene.geometry.vertex;
+import vulkan.memory.buffer;
+import vulkan.memory.image;
+import vulkan.context.command_pool;
+import vulkan.context.device;
 
 export module core.file;
 
@@ -28,7 +36,7 @@ export namespace core::file {
         return buffer;
     }
 
-    void loadModel(std::string modelPath, std::vector<glm::vec3>& vertexPositions, std::vector<uint32_t>& indices, std::vector<scene::geometry::Vertex>& vertices) {
+    void loadModel(const std::string modelPath, std::vector<glm::vec3>& vertexPositions, std::vector<uint32_t>& indices, std::vector<scene::geometry::Vertex>& vertices) {
         tinyobj::attrib_t attrib;
         std::vector<tinyobj::shape_t> shapes;
         std::vector<tinyobj::material_t> materials;
@@ -82,5 +90,39 @@ export namespace core::file {
                 indices.push_back(uniqueVertices[vertex]);
             }
         }
+    }
+
+    std::unique_ptr<vulkan::memory::Image> createTextureImage(const vulkan::context::Device& device, const std::string& texturePath, const vulkan::context::CommandPool& pool) {
+        auto cmd = pool.getSingleUseBuffer();
+
+        int texWidth, texHeight, texChannels;
+        stbi_uc *pixels = stbi_load(texturePath.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        vk::DeviceSize imageSize = texWidth * texHeight * 4;
+
+        if (!pixels) {
+            throw std::runtime_error("failed to load texture image!");
+        }
+        vulkan::memory::Buffer stagingBuffer(device, imageSize, vk::BufferUsageFlagBits::eTransferSrc,
+                                             vk::MemoryPropertyFlagBits::eHostVisible |
+                                             vk::MemoryPropertyFlagBits::eHostVisible);
+        stagingBuffer.fill(pixels, imageSize);
+        stbi_image_free(pixels);
+
+        vk::Extent3D extent = {static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), 1};
+        auto textureImage = std::make_unique<vulkan::memory::Image>(device.get(), device.physical(), extent, vk::Format::eR8G8B8A8Unorm,
+                                           vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+                                           vk::ImageAspectFlagBits::eColor);
+
+        vulkan::memory::Image::setImageLayout(cmd.get(), textureImage->getImage(), vk::ImageLayout::eUndefined,
+                                              vk::ImageLayout::eTransferDstOptimal);
+
+        vulkan::memory::Image::copyBufferToImage(cmd.get(), stagingBuffer.get(), textureImage->getImage(), extent);
+
+        vulkan::memory::Image::setImageLayout(cmd.get(), textureImage->getImage(), vk::ImageLayout::eTransferDstOptimal,
+                                              vk::ImageLayout::eShaderReadOnlyOptimal);
+
+        pool.submitSingleUse(std::move(cmd), device.computeQueue());
+
+        return textureImage;
     }
 }

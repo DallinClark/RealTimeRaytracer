@@ -61,7 +61,7 @@ public:
         swapchain_ = std::make_unique<vulkan::context::Swapchain>(*device_, *surface_);
         core::log::debug("Swap-chain set up");
 
-        glm::vec3 initialCameraPosition{ -50.0f,100.0f,20.0f };
+        glm::vec3 initialCameraPosition{ 0.0f,0.0f,5.0f };
         glm::vec3   initialCameraLookAt{ 0.0f,0.0f,0.0f };
         glm::vec3              cameraUp{ 0.0f,1.0f,0.0f };
         float fovY = 60;
@@ -101,6 +101,8 @@ public:
         commandPool.submitSingleUse(std::move(cmdImage), device_->computeQueue());
         device_->get().waitIdle();
 
+        auto textureImage = core::file::createTextureImage(*device_.get(), "../../assets/textures/statue-1275469_1280.jpg", commandPool);
+
         vk::Buffer cameraBuffer = camera_->getBuffer();
 
         std::vector<glm::vec3> vertexPositions{};
@@ -124,7 +126,7 @@ public:
         //create vertex and index buffer
         vulkan::memory::Buffer objectBuffer = vulkan::memory::Buffer::createDeviceLocalBuffer(commandPool, *device_, totalSize, vk::BufferUsageFlagBits::eVertexBuffer |
                 vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress | vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR |
-                vk::BufferUsageFlagBits::eTransferDst, objectDataRegions);
+                vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, objectDataRegions);
 
         vk::DeviceAddress baseAddress = objectBuffer.getAddress();
 
@@ -147,6 +149,14 @@ public:
                                               vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress
                                               | vk::BufferUsageFlagBits::eTransferDst, vertexDataRegions);
 
+        vk::DeviceSize indicesSize = sizeof(uint32_t) * indices.size(); // TODO figure out how to just pass the objectBuffer with an offset
+        std::vector<vulkan::memory::Buffer::FillRegion> indexDataRegions {
+                {indices.data() , indicesSize, 0},
+        };
+        vulkan::memory::Buffer indexBuffer = vulkan::memory::Buffer::createDeviceLocalBuffer(commandPool, *device_, indicesSize,
+                                                                                              vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress
+                                                                                              | vk::BufferUsageFlagBits::eTransferDst, indexDataRegions);
+
 
         /* JUST FOR TESTING */
         // FOR NOW JUST ONE DESCRIPTOR SET
@@ -157,12 +167,13 @@ public:
         layout.addBinding(1, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR);  // TLAS
         layout.addBinding(2, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR);  // camera
         layout.addBinding(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR); // vertex buffer
+        layout.addBinding(4, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR);
         layout.build();
 
         // We need this to happen automatically based off of needs
         std::vector<vk::DescriptorPoolSize> poolSizes = {
                 {vk::DescriptorType::eStorageImage, 1},
-                {vk::DescriptorType::eStorageBuffer, 1},
+                {vk::DescriptorType::eStorageBuffer, 2},
                 {vk::DescriptorType::eUniformBuffer, 1},
                 {vk::DescriptorType::eAccelerationStructureKHR, 1}
         };
@@ -170,10 +181,13 @@ public:
         vulkan::memory::DescriptorPool pool(device_->get(), poolSizes, 3);
         vk::DescriptorSet set = pool.allocate(layout)[0];
 
+        static_assert(sizeof(scene::geometry::Vertex) == 48, "Vertex size must match shader layout");
+
         pool.writeImage(set, 0, outputImage.getImageInfo(), vk::DescriptorType::eStorageImage);
         pool.writeAccelerationStructure(set, 1, vk::DescriptorType::eAccelerationStructureKHR, myTLAS.get());
-        pool.writeBuffer(set, 2, cameraBuffer, sizeof(scene::Camera::GPUCameraData), vk::DescriptorType::eUniformBuffer);
-        pool.writeBuffer(set, 3, vertexBuffer.get(), sizeof(scene::geometry::Vertex) * vertices.size() , vk::DescriptorType::eStorageBuffer);
+        pool.writeBuffer(set, 2, cameraBuffer, sizeof(scene::Camera::GPUCameraData), vk::DescriptorType::eUniformBuffer, 0);
+        pool.writeBuffer(set, 3, vertexBuffer.get(), sizeof(scene::geometry::Vertex) * vertices.size() , vk::DescriptorType::eStorageBuffer, 0);
+        pool.writeBuffer(set, 4, indexBuffer.get(), indexSize, vk::DescriptorType::eStorageBuffer, 0);
 
         std::vector<vk::DescriptorSetLayout> descriptorLayouts{layout.get()};
 
