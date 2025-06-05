@@ -162,7 +162,6 @@ add_executable(${PROJECT_NAME}
         src/vulkan/memory/image.cppm
         src/vulkan/raytracing/blas.cppm
         src/vulkan/raytracing/tlas.cppm
-        src/vulkan/raytracing/tlas.cppm
 )
 
 # --- MODULE SUPPORT -----------------------------------------
@@ -186,11 +185,15 @@ if(TARGET Vulkan::Vulkan AND NOT Vulkan_FOUND)
     )
 endif()
 
+# Add tinyobjloader subdirectory
+add_subdirectory(external/tinyobjloader)
+
 # Link against the loader, GLFW, and GLM
 target_link_libraries(${PROJECT_NAME} PRIVATE
         Vulkan::Vulkan
         glfw
         glm::glm
+        tinyobjloader
 )
 
 target_compile_definitions(RealTimeRaytracer

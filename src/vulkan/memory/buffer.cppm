@@ -208,6 +208,7 @@ namespace vulkan::memory {
 
     Buffer Buffer::createDeviceLocalBuffer(context::CommandPool& cmdPool, const context::Device& device, vk::DeviceSize size,
                                         vk::BufferUsageFlags usage, std::vector<Buffer::FillRegion>& regions) {
+
         vulkan::memory::Buffer stagingBuffer(
                 device,
                 size,
