@@ -19,7 +19,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-              clang-18 clang++-18 \ 
+              clang-18 clang++-18 \
               ninja-build \
               libvulkan-dev \
               libglfw3-dev \
