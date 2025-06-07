@@ -1,16 +1,8 @@
-# .github/workflows/clang.yml
-#
-# Runs clang-format (dry-run) and clang-tidy on every push / PR.
-# It uses the most recent LLVM packages available in the apt.llvm.org
-# snapshot repo and fails the job if any diagnostic promoted to error
-# is reported or if formatting differs from the committed code.
-#
 name: C++-Lint
 
 on:
   pull_request:
   push:
-    branches: [ main, develop ]     # adjust as needed
 
 jobs:
   lint:
