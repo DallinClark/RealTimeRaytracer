@@ -30,8 +30,8 @@ jobs:
       # --- Configure (generate compile_commands.json) ---
       - name: Configure with CMake
         run: cmake -B build -S . -G Ninja \
-                -DCMAKE_C_COMPILER=clang-18 \
-                -DCMAKE_CXX_COMPILER=clang++-18 \
+                -DCMAKE_C_COMPILER=clang-20 \
+                -DCMAKE_CXX_COMPILER=clang++-20 \
                 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
       # --- Run clang-format / clang-tidy ---
