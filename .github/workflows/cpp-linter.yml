@@ -1,0 +1,34 @@
+name: C++ Lint
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    permissions:            # ← let the action post review comments
+      contents: read
+      pull-requests: write
+
+    steps:
+      # 1. Grab the code
+      - uses: actions/checkout@v4
+
+      # 2. Generate compile_commands.json for clang-tidy
+      - name: Configure (CMake)
+        run: cmake -B build -S . -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      # 3. Run clang-format + clang-tidy via cpp-linter
+      - uses: cpp-linter/cpp-linter-action@v2
+        id: linter
+        with:
+          style: file                 # honour .clang-format
+          compile-commands: build/compile_commands.json
+          thread-comments: update     # single rolling thread on PRs
+          # llvm-version: 18          # uncomment to pin a tool-chain version
+
+      # 4. (Optional) explicitly fail if the action auto-fixed but left errors
+      - name: Fail on remaining errors
+        if: ${{ steps.linter.outputs.errors != '0' }}
+        run: exit 1
