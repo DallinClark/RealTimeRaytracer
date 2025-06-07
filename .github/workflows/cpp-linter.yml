@@ -18,11 +18,19 @@ jobs:
       - name: Install dependancies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ninja-build libvulkan-dev libglfw3-dev libglm-dev
+          sudo apt-get install -y --no-install-recommends \
+              clang-18 clang++-18 \ 
+              ninja-build \
+              libvulkan-dev \
+              libglfw3-dev \
+              libglm-dev
 
       # --- Configure (generate compile_commands.json) ---
       - name: Configure with CMake
-        run: cmake -B build -S . -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+        run: cmake -B build -S . -G Ninja \
+                -DCMAKE_C_COMPILER=clang-18 \
+                -DCMAKE_CXX_COMPILER=clang++-18 \
+                -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
       # --- Run clang-format / clang-tidy ---
       - uses: cpp-linter/cpp-linter-action@v2
