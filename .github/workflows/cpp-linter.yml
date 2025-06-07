@@ -47,7 +47,7 @@ jobs:
         id: linter
         with:
           style: file
-          compile-commands: build/compile_commands.json
+          database: build/compile_commands.json
           thread-comments: update
 
       - name: Fail on remaining errors
