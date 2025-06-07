@@ -18,7 +18,7 @@ jobs:
       - name: Install system Vulkan headers
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libvulkan-dev
+          sudo apt-get install -y --no-install-recommends libvulkan-dev glfw
 
       # --- Configure (generate compile_commands.json) ---
       - name: Configure with CMake
