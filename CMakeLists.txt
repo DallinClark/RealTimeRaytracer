@@ -152,16 +152,6 @@ add_custom_target(CompileShaders ALL DEPENDS ${SPV_TARGETS})
 # ----------------------------------------------------------------------------
 add_executable(${PROJECT_NAME}
         src/main.cpp
-        src/app/window.cppm
-        src/vulkan/memory/descriptor_set_layout.cppm
-        src/vulkan/memory/descriptor_pool.cppm
-        src/scene/camera.cppm
-        src/vulkan/context/command_pool.cppm
-        src/scene/geometry/triangle.cppm
-        src/scene/geometry/vertex.cppm
-        src/vulkan/memory/image.cppm
-        src/vulkan/raytracing/blas.cppm
-        src/vulkan/raytracing/tlas.cppm
 )
 
 # --- MODULE SUPPORT -----------------------------------------
@@ -202,3 +192,8 @@ target_compile_definitions(RealTimeRaytracer
 )
 
 add_dependencies(${PROJECT_NAME} CompileShaders)
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    target_compile_options(${PROJECT_NAME} PRIVATE -ftime-report)
+    target_compile_options(${PROJECT_NAME} PRIVATE -ftime-trace)
+endif()
