@@ -19,7 +19,14 @@ jobs:
       - name: Configure (CMake)
         run: cmake -B build -S . -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
-      # 3. Run clang-format + clang-tidy via cpp-linter
+      # 3. Install the Vulkan SDK
+      - name: Install Vulkan SDK
+        uses: jurplel/install-vulkan-sdk@v1
+        with:
+          version: 1.4.309.0
+          cache: true
+
+      # 4. Run clang-format + clang-tidy via cpp-linter
       - uses: cpp-linter/cpp-linter-action@v2
         id: linter
         with:
@@ -28,7 +35,7 @@ jobs:
           thread-comments: update     # single rolling thread on PRs
           # llvm-version: 18          # uncomment to pin a tool-chain version
 
-      # 4. (Optional) explicitly fail if the action auto-fixed but left errors
+      # 5. (Optional) explicitly fail if the action auto-fixed but left errors
       - name: Fail on remaining errors
         if: ${{ steps.linter.outputs.errors != '0' }}
         run: exit 1
