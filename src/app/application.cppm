@@ -107,6 +107,9 @@ public:
         auto textureImage = core::file::createTextureImage(*device_.get(), "../../assets/textures/pig_head_tex.jpg", commandPool);
         vulkan::memory::ImageSampler texSampler(*device_.get());
 
+        auto hdriImage = core::file::createTextureImage(*device_.get(), "../../assets/textures/pisztyk_4k.hdr", commandPool);
+        vulkan::memory::ImageSampler hdriSampler(*device_.get());
+
         vk::Buffer cameraBuffer = camera_->getBuffer();
 
         std::vector<std::string> objPaths = { "../../assets/objects/pig_head.obj" , "../../assets/objects/bobo.obj"};
@@ -172,11 +175,13 @@ public:
         // Create the camera
 
         layout.addBinding(0, vk::DescriptorType::eStorageImage,  vk::ShaderStageFlagBits::eRaygenKHR); // image
-        layout.addBinding(1, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR);  // TLAS
+        layout.addBinding(1, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR);  // TLAS
         layout.addBinding(2, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR);  // camera
         layout.addBinding(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR); // vertex buffer
         layout.addBinding(4, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR);
         layout.addBinding(5, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eClosestHitKHR);
+        layout.addBinding(6, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eMissKHR);
+
         layout.build();
 
         // We need this to happen automatically based off of needs
@@ -185,7 +190,7 @@ public:
                 {vk::DescriptorType::eStorageBuffer, 2},
                 {vk::DescriptorType::eUniformBuffer, 1},
                 {vk::DescriptorType::eAccelerationStructureKHR, 1},
-                {vk::DescriptorType::eCombinedImageSampler, 1}
+                {vk::DescriptorType::eCombinedImageSampler, 2}
         };
 
         vulkan::memory::DescriptorPool pool(device_->get(), poolSizes, 3);
@@ -198,6 +203,7 @@ public:
         pool.writeBuffer(set, 3, vertexBuffer.get(), sizeof(scene::geometry::Vertex) * vertices.size() , vk::DescriptorType::eStorageBuffer, 0);
         pool.writeBuffer(set, 4, indexBuffer.get(), indices.size() * sizeof(uint32_t), vk::DescriptorType::eStorageBuffer, 0);
         pool.writeImage(set, 5, textureImage->getImageInfoWithSampler(texSampler.get()), vk::DescriptorType::eCombinedImageSampler);
+        pool.writeImage(set, 6, hdriImage->getImageInfoWithSampler(hdriSampler.get()), vk::DescriptorType::eCombinedImageSampler);
 
         std::vector<vk::DescriptorSetLayout> descriptorLayouts{layout.get()};
 
