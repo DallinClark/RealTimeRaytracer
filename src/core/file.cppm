@@ -36,11 +36,13 @@ export namespace core::file {
         return buffer;
     }
 
-    void loadModel(const std::string modelPath, std::vector<glm::vec3>& vertexPositions, std::vector<uint32_t>& indices, std::vector<scene::geometry::Vertex>& vertices) {
+    void loadModel(const std::string& modelPath, std::vector<glm::vec3>& vertexPositions, std::vector<uint32_t>& indices, std::vector<scene::geometry::Vertex>& vertices) {
         tinyobj::attrib_t attrib;
         std::vector<tinyobj::shape_t> shapes;
         std::vector<tinyobj::material_t> materials;
         std::string warn, err;
+
+        uint32_t newVertexCount = 0; // used for 0 indexed indices with respect to the vertices
 
         if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, modelPath.c_str())) {
             throw std::runtime_error(warn + err);
@@ -66,6 +68,7 @@ export namespace core::file {
                             attrib.normals[3 * index.normal_index + 1],
                             attrib.normals[3 * index.normal_index + 2]
                     };
+
                 } else {
                     vertex.normal = glm::vec3(0.0f, 0.0f, 0.0f); // TODO maybe compute this later if not included
                 }
@@ -82,9 +85,10 @@ export namespace core::file {
 
                 // Check if vertex is unique
                 if (uniqueVertices.count(vertex) == 0) {
-                    uniqueVertices[vertex] = static_cast<uint32_t>(vertices.size());
+                    uniqueVertices[vertex] = newVertexCount;
                     vertices.push_back(vertex);
                     vertexPositions.push_back(vertex.position);
+                    ++newVertexCount;
                 }
 
                 indices.push_back(uniqueVertices[vertex]);

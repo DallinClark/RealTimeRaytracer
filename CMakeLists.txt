@@ -163,6 +163,8 @@ add_executable(${PROJECT_NAME}
         src/vulkan/raytracing/blas.cppm
         src/vulkan/raytracing/tlas.cppm
         external/stb/stb_image.h
+        src/app/setup/geometry_builder.cppm
+        src/vulkan/memory/image_sampler.cppm
 )
 
 # --- MODULE SUPPORT -----------------------------------------

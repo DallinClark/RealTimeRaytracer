@@ -51,10 +51,10 @@ namespace vulkan::raytracing {
         vk::AccelerationStructureGeometryTrianglesDataKHR triangles{};
         triangles.setVertexFormat(vk::Format::eR32G32B32Sfloat);
         triangles.setVertexStride(vertexStride);
-        triangles.setVertexData(vertexAddress);
+        triangles.setVertexData(vertexAddr);
         triangles.setMaxVertex(vertexCount);
         triangles.setIndexType(indexType);
-        triangles.setIndexData(indexAddress);
+        triangles.setIndexData(indexAddr);
 
         //wrapper around the above with the geometry type enum (triangles in this case) plus flags for the AS builder
         vk::AccelerationStructureGeometryKHR geometry{};

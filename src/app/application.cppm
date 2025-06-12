@@ -33,7 +33,10 @@ import core.file;
 import scene.camera;
 import scene.geometry.vertex;
 import scene.geometry.triangle;
-#include <vulkan/vulkan_enums.hpp>
+
+import app.setup.geometry_builder;
+
+import vulkan.memory.image_sampler;
 
 export namespace app {
 
@@ -101,64 +104,49 @@ public:
         commandPool.submitSingleUse(std::move(cmdImage), device_->computeQueue());
         device_->get().waitIdle();
 
-        auto textureImage = core::file::createTextureImage(*device_.get(), "../../assets/textures/pig_head_tex.jpg", commandPool); // TODO wrap all texture stuff in a class
-        vk::UniqueSampler texSampler;
-        vk::SamplerCreateInfo samplerCreateInfo{};
-        samplerCreateInfo.setMagFilter(vk::Filter::eLinear);
-        samplerCreateInfo.setMinFilter(vk::Filter::eLinear);
-        samplerCreateInfo.setAddressModeU(vk::SamplerAddressMode::eRepeat);
-        samplerCreateInfo.setAddressModeV(vk::SamplerAddressMode::eRepeat);
-        samplerCreateInfo.setAddressModeW(vk::SamplerAddressMode::eRepeat);
-        samplerCreateInfo.setAnisotropyEnable(vk::True);
-
-        vk::PhysicalDeviceProperties propertiesPhysical = device_->physical().getProperties();
-        samplerCreateInfo.setMaxAnisotropy(propertiesPhysical.limits.maxSamplerAnisotropy);
-        samplerCreateInfo.setBorderColor(vk::BorderColor::eFloatOpaqueBlack);
-        samplerCreateInfo.setUnnormalizedCoordinates(vk::False);
-        samplerCreateInfo.setCompareEnable(vk::False);
-        samplerCreateInfo.setCompareOp(vk::CompareOp::eAlways);
-        samplerCreateInfo.setMipmapMode(vk::SamplerMipmapMode::eLinear);
-        samplerCreateInfo.setMipLodBias(0.0f);
-        samplerCreateInfo.setMinLod(0.0f);
-        samplerCreateInfo.setMaxLod(0.0f);
-        texSampler = device_->get().createSamplerUnique(samplerCreateInfo);
+        auto textureImage = core::file::createTextureImage(*device_.get(), "../../assets/textures/pig_head_tex.jpg", commandPool);
+        vulkan::memory::ImageSampler texSampler(*device_.get());
 
         vk::Buffer cameraBuffer = camera_->getBuffer();
 
-        std::vector<glm::vec3> vertexPositions{};
-        std::vector<uint32_t> indices{};
-        std::vector<scene::geometry::Vertex> vertices{};
-        core::file::loadModel("../../assets/objects/pig_head.obj", vertexPositions, indices, vertices);
-
-        vk::DeviceSize vertexSize = vertexPositions.size() * sizeof(glm::vec3);
-        vk::DeviceSize indexSize  = indices.size() * sizeof(uint32_t);
-
-        vk::DeviceSize vertexOffset = 0;
-        vk::DeviceSize indexOffset  = vertexOffset + vertexSize;
-
-        vk::DeviceSize totalSize = vertexOffset + vertexSize + indexSize;
-
-        std::vector<vulkan::memory::Buffer::FillRegion> objectDataRegions {
-                {vertexPositions.data() , vertexSize, vertexOffset},
-                {indices.data(), indexSize, indexOffset}
+        std::vector<std::string> objPaths = { "../../assets/objects/pig_head.obj" , "../../assets/objects/bobo.obj"};
+        std::vector<std::pair<vk::TransformMatrixKHR, int>> transforms = {
+                {
+                        vk::TransformMatrixKHR{
+                                std::array<std::array<float, 4>, 3>{{
+                                                                            {1.0f, 0.0f, 0.0f, 5.0f},  // Translate X by 5 units
+                                                                            {0.0f, 1.0f, 0.0f, 0.0f},
+                                                                            {0.0f, 0.0f, 1.0f, 0.0f}
+                                                                    }}
+                        },
+                        0  // Index into objPaths (i.e., pig_head.obj)
+                },
+                {
+                        vk::TransformMatrixKHR{
+                                std::array<std::array<float, 4>, 3>{{
+                                                                            {1.0f, 0.0f, 0.0f, 0.0f},  // Translate X by 0 units
+                                                                            {0.0f, 1.0f, 0.0f, 0.0f},
+                                                                            {0.0f, 0.0f, 1.0f, 0.0f}
+                                                                    }}
+                        },
+                        0  // Index into objPaths (i.e., pig_head.obj)
+                },
+                {
+                    vk::TransformMatrixKHR{
+                            std::array<std::array<float, 4>, 3>{{
+                                                                        {1.0f, 0.0f, 0.0f, -5.0f},  // Translate X by -5 units
+                                                                        {0.0f, 1.0f, 0.0f, 0.0f},
+                                                                        {0.0f, 0.0f, 1.0f, 0.0f}
+                                                                }}
+                    },
+                            1  // Index into objPaths (i.e., pig_head.obj)
+                }
         };
-
-        //create vertex and index buffer
-        vulkan::memory::Buffer objectBuffer = vulkan::memory::Buffer::createDeviceLocalBuffer(commandPool, *device_, totalSize, vk::BufferUsageFlagBits::eVertexBuffer |
-                vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress | vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR |
-                vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, objectDataRegions);
-
-        vk::DeviceAddress baseAddress = objectBuffer.getAddress();
-
-        vk::DeviceAddress vertexAddress = baseAddress + vertexOffset;
-        vk::DeviceAddress indexAddress  = baseAddress + indexOffset;
-        uint32_t vertexCount = vertexPositions.size();
-        vk::DeviceSize vertexStride = sizeof(glm::vec3);
-        uint32_t indexCount = indices.size();
-
-        // create acceleration structures
-        vulkan::raytracing::BLAS triangleBLAS (*device_, commandPool, vertexAddress, indexAddress, vertexCount, vertexStride, indexCount, vk::IndexType::eUint32);
-        vulkan::raytracing::TLAS myTLAS (*device_, commandPool, triangleBLAS);
+        auto geoReturnInfo = app::setup::GeometryBuilder::createTLASFromOBJsAndTransforms(*device_, commandPool, objPaths, transforms);
+        std::vector<glm::vec3>                     vertexPositions = geoReturnInfo.vertexPositions;
+        std::vector<scene::geometry::Vertex>       vertices = geoReturnInfo.vertices;
+        std::vector<uint32_t>                      indices = geoReturnInfo.indices;
+        std::unique_ptr<vulkan::raytracing::TLAS>  tlas = std::move(geoReturnInfo.tlas);
 
         // create shader vertex buffer
         vk::DeviceSize verticesSize = sizeof(scene::geometry::Vertex) * vertices.size();
@@ -204,12 +192,11 @@ public:
         vk::DescriptorSet set = pool.allocate(layout)[0];
 
         static_assert(sizeof(scene::geometry::Vertex) == 48, "Vertex size must match shader layout");
-
         pool.writeImage(set, 0, outputImage.getImageInfo(), vk::DescriptorType::eStorageImage);
-        pool.writeAccelerationStructure(set, 1, vk::DescriptorType::eAccelerationStructureKHR, myTLAS.get());
+        pool.writeAccelerationStructure(set, 1, vk::DescriptorType::eAccelerationStructureKHR, tlas->get());
         pool.writeBuffer(set, 2, cameraBuffer, sizeof(scene::Camera::GPUCameraData), vk::DescriptorType::eUniformBuffer, 0);
         pool.writeBuffer(set, 3, vertexBuffer.get(), sizeof(scene::geometry::Vertex) * vertices.size() , vk::DescriptorType::eStorageBuffer, 0);
-        pool.writeBuffer(set, 4, indexBuffer.get(), indexSize, vk::DescriptorType::eStorageBuffer, 0);
+        pool.writeBuffer(set, 4, indexBuffer.get(), indices.size() * sizeof(uint32_t), vk::DescriptorType::eStorageBuffer, 0);
         pool.writeImage(set, 5, textureImage->getImageInfoWithSampler(texSampler.get()), vk::DescriptorType::eCombinedImageSampler);
 
         std::vector<vk::DescriptorSetLayout> descriptorLayouts{layout.get()};
@@ -275,7 +262,7 @@ private:
     std::unique_ptr<vulkan::context::Device>    device_;
     std::unique_ptr<vulkan::context::Swapchain> swapchain_;
 
-    float CAM_SPEED = 0.02f;
+    float CAM_SPEED = 0.08f;
     float MOUSE_SENSITIVITY = 0.5f;
 };
 

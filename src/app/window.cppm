@@ -12,8 +12,7 @@ import scene.camera;
 
 export namespace app  {
 
-    class Window
-    {
+    class Window {
     public:
         Window(std::string_view windowName, int windowWidth, int windowHeight, float mouseSensitivity);
         ~Window();
@@ -73,19 +72,19 @@ export namespace app  {
         bool camMoved = false;
 
         if (glfwGetKey(window_, GLFW_KEY_W) == GLFW_PRESS) {
-            camPosition += (camera_->getForward() * deltaTime * camSpeed);
+            camPosition += (camera_->getForward() * camSpeed);
             camMoved = true;
         }
         if (glfwGetKey(window_, GLFW_KEY_S) == GLFW_PRESS) {
-            camPosition -= (camera_->getForward() * deltaTime * camSpeed);
+            camPosition -= (camera_->getForward() * camSpeed);
             camMoved = true;
         }
         if (glfwGetKey(window_, GLFW_KEY_A) == GLFW_PRESS) {
-            camPosition -= (camera_->getRight() * deltaTime * camSpeed);
+            camPosition -= (camera_->getRight() * camSpeed);
             camMoved = true;
         }
         if (glfwGetKey(window_, GLFW_KEY_D) == GLFW_PRESS) {
-            camPosition += (camera_->getRight() * deltaTime * camSpeed);
+            camPosition += (camera_->getRight() * camSpeed);
             camMoved = true;
         }
         if (camMoved) {

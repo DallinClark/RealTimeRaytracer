@@ -14,7 +14,7 @@ namespace vulkan::raytracing {
     export class TLAS {
     public:
         TLAS(const context::Device& device, context::CommandPool& commandPool,
-             const BLAS& blass);
+             const std::vector<const BLAS*>& blass, const std::vector<std::pair<vk::TransformMatrixKHR, int>> transformMatrices);
 
         const vk::AccelerationStructureKHR& get() const { return accelerationStructure_.get(); }
         vk::DeviceAddress deviceAddress() const { return deviceAddress_; }
@@ -28,32 +28,43 @@ namespace vulkan::raytracing {
         vk::DeviceAddress                     deviceAddress_;
         vk::UniqueAccelerationStructureKHR    accelerationStructure_;
     };
+
     TLAS::TLAS(const context::Device& device, context::CommandPool& commandPool,
-         const BLAS& blas) :
+               const std::vector<const BLAS*>& blass, const std::vector<std::pair<vk::TransformMatrixKHR, int>> transformMatrices) :
             device_(device.get()), physicalDevice_(device.physical()) {
 
-        vk::TransformMatrixKHR transformMatrix = std::array{
-                std::array{1.0f, 0.0f, 0.0f, 0.0f},
-                std::array{0.0f, 1.0f, 0.0f, 0.0f},
-                std::array{0.0f, 0.0f, 1.0f, 0.0f},
-        };
+        std::vector<vk::AccelerationStructureInstanceKHR> accelInstances; // MAYBE ADD A .reserve
 
+        for (int i = 0; i < transformMatrices.size(); ++i) {
+            auto transformPair = transformMatrices[i];
 
-        vk::AccelerationStructureInstanceKHR accelInstance;  // THIS IS HARD CODED FOR NOW, AS WELL AS TRANSFORMATION MATRIX, JUST FOR TESTING
-        accelInstance.setTransform(transformMatrix);
-        accelInstance.setMask(0xFF);
-        accelInstance.setAccelerationStructureReference(blas.getAddress());
-        accelInstance.setFlags(vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable);
+            int blasIndex = transformPair.second;
+            vk::TransformMatrixKHR transform = transformPair.first;
 
+            const BLAS* blas = blass[blasIndex];
+
+            vk::AccelerationStructureInstanceKHR instance;
+            instance.setTransform(transform);
+            instance.setAccelerationStructureReference(blas->getAddress());
+            instance.setMask(0xFF);
+            //instance.setInstanceShaderBindingTableRecordOffset(0); // Look into this later
+            instance.setInstanceCustomIndex(static_cast<uint32_t>(i)); // useful in shaders
+            instance.setFlags(
+                    vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable);  // MAYBE ENABLE IN FUTURE
+
+            accelInstances.push_back(instance);
+        }
+
+        uint32_t instanceCount = accelInstances.size();
         // Upload instances to buffer
         memory::Buffer instanceBuffer(
                 device,
-                sizeof(vk::AccelerationStructureInstanceKHR),
+                sizeof(vk::AccelerationStructureInstanceKHR) * instanceCount,
                 vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR | vk::BufferUsageFlagBits::eStorageBuffer |
                 vk::BufferUsageFlagBits::eShaderDeviceAddress,
                 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
         );
-        instanceBuffer.fill(&accelInstance, sizeof(vk::AccelerationStructureInstanceKHR));
+        instanceBuffer.fill(accelInstances.data(), sizeof(vk::AccelerationStructureInstanceKHR) * instanceCount);
 
         vk::AccelerationStructureGeometryInstancesDataKHR instancesData;
         instancesData.setArrayOfPointers(false);
@@ -68,13 +79,16 @@ namespace vulkan::raytracing {
         buildGeometryInfo.setType(vk::AccelerationStructureTypeKHR::eTopLevel);
         buildGeometryInfo.setFlags(vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace);
         buildGeometryInfo.setGeometries(instanceGeometry);
+        buildGeometryInfo.setMode(vk::BuildAccelerationStructureModeKHR::eBuild);
 
-        vk::AccelerationStructureBuildSizesInfoKHR sizeInfo = device_.getAccelerationStructureBuildSizesKHR(
-                vk::AccelerationStructureBuildTypeKHR::eDevice, buildGeometryInfo, 1);   // HARD CODED FOR NOW
+        std::vector<uint32_t> primitiveCounts{ instanceCount };
+
+        auto sizeInfo = device_.getAccelerationStructureBuildSizesKHR(
+                vk::AccelerationStructureBuildTypeKHR::eDevice, buildGeometryInfo, primitiveCounts);
 
         buffer_ = memory::Buffer( device, sizeInfo.accelerationStructureSize,
-                vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR | vk::BufferUsageFlagBits::eShaderDeviceAddress,
-                vk::MemoryPropertyFlagBits::eDeviceLocal );
+                                  vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR | vk::BufferUsageFlagBits::eShaderDeviceAddress,
+                                  vk::MemoryPropertyFlagBits::eDeviceLocal );
 
 
         vk::AccelerationStructureCreateInfoKHR createInfo = {};
@@ -95,7 +109,7 @@ namespace vulkan::raytracing {
         buildGeometryInfo.setMode(vk::BuildAccelerationStructureModeKHR::eBuild);
 
         vk::AccelerationStructureBuildRangeInfoKHR buildRangeInfo;
-        buildRangeInfo.setPrimitiveCount(1);
+        buildRangeInfo.setPrimitiveCount(instanceCount);
         buildRangeInfo.setFirstVertex(0);
         buildRangeInfo.setPrimitiveOffset(0);
         buildRangeInfo.setTransformOffset(0);
