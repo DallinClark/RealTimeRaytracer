@@ -2,7 +2,7 @@
 #extension GL_EXT_ray_tracing : require
 #extension GL_EXT_nonuniform_qualifier : enable
 
-layout(set = 0, binding = 6) uniform sampler2D hdri;
+layout(set = 0, binding = 8) uniform sampler2D hdri;
 
 layout(location = 0) rayPayloadInEXT vec3 payload;
 

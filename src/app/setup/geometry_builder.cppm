@@ -4,21 +4,24 @@ module;
 #include <glm/glm.hpp>
 #include <string>
 #include <iostream>
+#include <memory>
 
 export module app.setup.geometry_builder;
 
 import core.log;
 import core.file;
 import scene.geometry.vertex;
+import scene.geometry.object;
 import vulkan.raytracing.blas;
 import vulkan.raytracing.tlas;
 import vulkan.memory.buffer;
 import vulkan.context.device;
 import vulkan.context.command_pool;
 
+
 export namespace app::setup  {
     /* Usage: takes in a vector of filepaths to obj files
-     * and a vector of transforms paired with indexes into the filepath vector,
+     * and a vector of objectCreateInfos,
      * and creates all the info for them and creates a TLAS */
 
     class GeometryBuilder {
@@ -42,11 +45,13 @@ export namespace app::setup  {
             std::vector<scene::geometry::Vertex>                     vertices;
             std::vector<glm::vec3>                                   vertexPositions;
             std::vector<uint32_t>                                    indices;
+            vulkan::memory::Buffer                                   vertexBuffer;
+            vulkan::memory::Buffer                                   indexBuffer;
         };
 
         static GeometryReturnInfo createTLASFromOBJsAndTransforms(const vulkan::context::Device& device, vulkan::context::CommandPool& commandPool,
                                                     const std::vector<std::string>& objStrings,
-                                                    const std::vector<std::pair<vk::TransformMatrixKHR, int>>& transforms);
+                                                    const std::vector<scene::geometry::ObjectCreateInfo>& objectCreateInfos);
 
     private:
     };
@@ -54,7 +59,7 @@ export namespace app::setup  {
     GeometryBuilder::GeometryReturnInfo GeometryBuilder::createTLASFromOBJsAndTransforms(
             const vulkan::context::Device& device, vulkan::context::CommandPool& commandPool,
             const std::vector<std::string>& objStrings,
-            const std::vector<std::pair<vk::TransformMatrixKHR, int>>& transforms){
+            const std::vector<scene::geometry::ObjectCreateInfo>& objectCreateInfos){
 
         std::vector<glm::vec3> vertexPositions{};
         std::vector<uint32_t> indices{};
@@ -143,7 +148,9 @@ export namespace app::setup  {
                     mesh.vertexCount,
                     mesh.vertexStride,
                     mesh.indexCount,
-                    vk::IndexType::eUint32
+                    vk::IndexType::eUint32,
+                    mesh.vertexOffset / sizeof(glm::vec3),
+                    mesh.indexOffset / sizeof(uint32_t)
             );
 
             blass.push_back(newBLAS.get());      // collect raw pointer
@@ -151,14 +158,16 @@ export namespace app::setup  {
         }
 
         // create acceleration structures
-        auto tlas = std::make_unique<vulkan::raytracing::TLAS>(device, commandPool, blass, transforms);
+        auto tlas = std::make_unique<vulkan::raytracing::TLAS>(device, commandPool, blass, objectCreateInfos);
 
         return GeometryReturnInfo {
                 std::move(tlas),
                 std::move(blasStorage),
                 std::move(vertices),
                 std::move(vertexPositions),
-                std::move(indices)
+                std::move(indices),
+                std::move(vertexBuffer),
+                std::move(indexBuffer)
         };
 
 //        TLAS::TLAS(const context::Device& device, context::CommandPool& commandPool,

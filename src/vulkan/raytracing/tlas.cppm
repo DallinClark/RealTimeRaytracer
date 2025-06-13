@@ -9,17 +9,29 @@ import vulkan.context.device;
 import vulkan.memory.buffer;
 import vulkan.context.command_pool;
 import vulkan.raytracing.blas;
+import scene.geometry.object;
+
+
 namespace vulkan::raytracing {
 
     export class TLAS {
     public:
         TLAS(const context::Device& device, context::CommandPool& commandPool,
-             const std::vector<const BLAS*>& blass, const std::vector<std::pair<vk::TransformMatrixKHR, int>> transformMatrices);
+             const std::vector<const BLAS*>& blass, const std::vector<scene::geometry::ObjectCreateInfo>& objectCreateInfos);
+
+        struct BLASInstanceInfo {
+            uint32_t vertexIndexOffset;
+            uint32_t indexIndexOffset;
+            uint32_t textureIndex;
+            uint32_t _padding = 0;
+        };
+
 
         const vk::AccelerationStructureKHR& get() const { return accelerationStructure_.get(); }
         vk::DeviceAddress deviceAddress() const { return deviceAddress_; }
 
         vk::Buffer getBuffer() { return buffer_->get(); }
+        std::vector<BLASInstanceInfo> getBLASInfos() { return BLASInstanceInfos_; }
 
     private:
         vk::Device                            device_;
@@ -27,19 +39,24 @@ namespace vulkan::raytracing {
         std::optional<vulkan::memory::Buffer> buffer_;
         vk::DeviceAddress                     deviceAddress_;
         vk::UniqueAccelerationStructureKHR    accelerationStructure_;
+
+        // a vector of BLASInstanceInfos passed into the shader to give each blas information
+        // TODO include texture index
+        std::vector<BLASInstanceInfo> BLASInstanceInfos_;
     };
 
     TLAS::TLAS(const context::Device& device, context::CommandPool& commandPool,
-               const std::vector<const BLAS*>& blass, const std::vector<std::pair<vk::TransformMatrixKHR, int>> transformMatrices) :
+               const std::vector<const BLAS*>& blass, const std::vector<scene::geometry::ObjectCreateInfo>& objectCreateInfos) :
             device_(device.get()), physicalDevice_(device.physical()) {
 
         std::vector<vk::AccelerationStructureInstanceKHR> accelInstances; // MAYBE ADD A .reserve
 
-        for (int i = 0; i < transformMatrices.size(); ++i) {
-            auto transformPair = transformMatrices[i];
 
-            int blasIndex = transformPair.second;
-            vk::TransformMatrixKHR transform = transformPair.first;
+        for (int i = 0; i < objectCreateInfos.size(); ++i) {
+            auto currCreateInfo = objectCreateInfos[i];
+
+            uint32_t blasIndex = currCreateInfo.objectIndex;
+            vk::TransformMatrixKHR transform = currCreateInfo.transform;
 
             const BLAS* blas = blass[blasIndex];
 
@@ -48,11 +65,14 @@ namespace vulkan::raytracing {
             instance.setAccelerationStructureReference(blas->getAddress());
             instance.setMask(0xFF);
             //instance.setInstanceShaderBindingTableRecordOffset(0); // Look into this later
-            instance.setInstanceCustomIndex(static_cast<uint32_t>(i)); // useful in shaders
-            instance.setFlags(
-                    vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable);  // MAYBE ENABLE IN FUTURE
+
+            instance.setInstanceCustomIndex(i); // useful in shaders
+            instance.setFlags(vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable);  // MAYBE ENABLE IN FUTURE
 
             accelInstances.push_back(instance);
+
+            BLASInstanceInfo BLASInstanceInfo{blas->getVertexIndexOffset(), blas->getIndexIndexOffset(), currCreateInfo.textureIndex};
+            BLASInstanceInfos_.push_back(BLASInstanceInfo);
         }
 
         uint32_t instanceCount = accelInstances.size();
