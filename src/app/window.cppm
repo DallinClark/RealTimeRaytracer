@@ -59,7 +59,7 @@ export namespace app  {
 
         glfwSetWindowUserPointer(window_, this);
         glfwSetCursorPosCallback(window_, mouseCallback);
-        glfwSetInputMode(window_, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        //glfwSetInputMode(window_, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     }
 
     void Window::processInput(float deltaTime, float camSpeed) {

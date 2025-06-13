@@ -165,6 +165,7 @@ add_executable(${PROJECT_NAME}
         external/stb/stb_image.h
         src/app/setup/geometry_builder.cppm
         src/vulkan/memory/image_sampler.cppm
+        src/scene/geometry/object.cppm
 )
 
 # --- MODULE SUPPORT -----------------------------------------

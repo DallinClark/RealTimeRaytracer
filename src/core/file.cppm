@@ -8,6 +8,8 @@ module;
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.hpp>
 #include <unordered_map>
+#include <memory>
+#include <functional>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -36,6 +38,17 @@ export namespace core::file {
         return buffer;
     }
 
+    struct Vec3Hasher {
+        size_t operator()(const glm::vec3& v) const {
+            std::hash<float> hasher;
+            size_t h1 = hasher(v.x);
+            size_t h2 = hasher(v.y);
+            size_t h3 = hasher(v.z);
+            return ((h1 ^ (h2 << 1)) >> 1) ^ (h3 << 1);
+        }
+    };
+
+
     void loadModel(const std::string& modelPath, std::vector<glm::vec3>& vertexPositions, std::vector<uint32_t>& indices, std::vector<scene::geometry::Vertex>& vertices) {
         tinyobj::attrib_t attrib;
         std::vector<tinyobj::shape_t> shapes;
@@ -49,13 +62,14 @@ export namespace core::file {
         }
 
         std::unordered_map<scene::geometry::Vertex, uint32_t> uniqueVertices{};
+        std::unordered_map<glm::vec3, uint32_t, Vec3Hasher> uniquePositions{};
 
         for (const auto &shape: shapes) {
             for (const auto &index: shape.mesh.indices) {
                 scene::geometry::Vertex vertex{};
 
                 // Position
-                vertex.position = {
+                glm::vec3 position = {
                         attrib.vertices[3 * index.vertex_index + 0],
                         attrib.vertices[3 * index.vertex_index + 1],
                         attrib.vertices[3 * index.vertex_index + 2]
@@ -84,10 +98,11 @@ export namespace core::file {
                 }
 
                 // Check if vertex is unique
-                if (uniqueVertices.count(vertex) == 0) {
+                if (uniqueVertices.count(vertex) == 0 || uniquePositions.count(position) == 0) {
                     uniqueVertices[vertex] = newVertexCount;
+                    uniquePositions[position] = newVertexCount;
                     vertices.push_back(vertex);
-                    vertexPositions.push_back(vertex.position);
+                    vertexPositions.push_back(position);
                     ++newVertexCount;
                 }
 
@@ -128,6 +143,6 @@ export namespace core::file {
 
         pool.submitSingleUse(std::move(cmd), device.computeQueue());
 
-        return textureImage;
+        return std::move(textureImage);
     }
 }

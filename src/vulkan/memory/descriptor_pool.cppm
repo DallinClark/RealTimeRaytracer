@@ -22,6 +22,8 @@ public:
 
     void writeImage(vk::DescriptorSet set, uint32_t binding, const vk::DescriptorImageInfo& imageInfo, vk::DescriptorType type);
 
+    void writeImages(vk::DescriptorSet set, uint32_t binding, const std::vector<vk::DescriptorImageInfo>& imageInfos, vk::DescriptorType type);
+
     void writeAccelerationStructure(vk::DescriptorSet set, uint32_t binding, vk::DescriptorType type, vk::AccelerationStructureKHR TLAS);
 
 
@@ -132,4 +134,21 @@ void DescriptorPool::writeAccelerationStructure(vk::DescriptorSet set, uint32_t 
 
     device_.updateDescriptorSets(write, {});
 }
+
+void DescriptorPool::writeImages(vk::DescriptorSet set, uint32_t binding, const std::vector<vk::DescriptorImageInfo>& imageInfos, vk::DescriptorType type) {
+    if (imageInfos.empty()) {
+        throw std::runtime_error("writeImages: imageInfos is empty.");
+    }
+
+    vk::WriteDescriptorSet write{};
+    write.dstSet = set;
+    write.dstBinding = binding;
+    write.dstArrayElement = 0;
+    write.descriptorCount = static_cast<uint32_t>(imageInfos.size());
+    write.descriptorType = type;
+    write.pImageInfo = imageInfos.data();
+
+    device_.updateDescriptorSets(write, {});
+}
+
 } // namespace vulkan

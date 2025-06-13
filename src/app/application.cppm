@@ -3,7 +3,6 @@ module;
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <tiny_obj_loader.h>
-
 #include <GLFW/glfw3.h>
 #include <iostream>
 #include <stdexcept>
@@ -33,6 +32,7 @@ import core.file;
 import scene.camera;
 import scene.geometry.vertex;
 import scene.geometry.triangle;
+import scene.geometry.object;
 
 import app.setup.geometry_builder;
 
@@ -104,49 +104,83 @@ public:
         commandPool.submitSingleUse(std::move(cmdImage), device_->computeQueue());
         device_->get().waitIdle();
 
-        auto textureImage = core::file::createTextureImage(*device_.get(), "../../assets/textures/pig_head_tex.jpg", commandPool);
-        vulkan::memory::ImageSampler texSampler(*device_.get());
-
         vk::Buffer cameraBuffer = camera_->getBuffer();
 
-        std::vector<std::string> objPaths = { "../../assets/objects/pig_head.obj" , "../../assets/objects/bobo.obj"};
-        std::vector<std::pair<vk::TransformMatrixKHR, int>> transforms = {
-                {
-                        vk::TransformMatrixKHR{
-                                std::array<std::array<float, 4>, 3>{{
-                                                                            {1.0f, 0.0f, 0.0f, 5.0f},  // Translate X by 5 units
-                                                                            {0.0f, 1.0f, 0.0f, 0.0f},
-                                                                            {0.0f, 0.0f, 1.0f, 0.0f}
-                                                                    }}
-                        },
-                        0  // Index into objPaths (i.e., pig_head.obj)
-                },
-                {
-                        vk::TransformMatrixKHR{
-                                std::array<std::array<float, 4>, 3>{{
-                                                                            {1.0f, 0.0f, 0.0f, 0.0f},  // Translate X by 0 units
-                                                                            {0.0f, 1.0f, 0.0f, 0.0f},
-                                                                            {0.0f, 0.0f, 1.0f, 0.0f}
-                                                                    }}
-                        },
-                        0  // Index into objPaths (i.e., pig_head.obj)
-                },
-                {
-                    vk::TransformMatrixKHR{
-                            std::array<std::array<float, 4>, 3>{{
-                                                                        {1.0f, 0.0f, 0.0f, -5.0f},  // Translate X by -5 units
-                                                                        {0.0f, 1.0f, 0.0f, 0.0f},
-                                                                        {0.0f, 0.0f, 1.0f, 0.0f}
-                                                                }}
-                    },
-                            1  // Index into objPaths (i.e., pig_head.obj)
-                }
-        };
-        auto geoReturnInfo = app::setup::GeometryBuilder::createTLASFromOBJsAndTransforms(*device_, commandPool, objPaths, transforms);
+        // obj and texture vectors with indices matching
+        std::vector<std::string> objPaths = { "../../assets/objects/pig_head.obj" ,        // 0
+                                              "../../assets/objects/rubber_toy.obj"};  // 1
+
+        std::vector<std::unique_ptr<vulkan::memory::Image>> textureImages;
+        textureImages.push_back(core::file::createTextureImage(*device_, "../../assets/textures/pig_head_tex.jpg", commandPool));        // 0
+        textureImages.push_back(core::file::createTextureImage(*device_, "../../assets/textures/rubber_toy.jpg", commandPool));          // 1
+
+        // Sets up the textures
+        vulkan::memory::ImageSampler texSampler(*device_.get());
+        std::vector<vk::DescriptorImageInfo> descriptorTextures = {};
+        for (const auto& image : textureImages) {
+            descriptorTextures.push_back(image->getImageInfoWithSampler(texSampler.get()));
+        }
+
+        /* create info for each of the objects, in this order:
+         * transform
+         * index into obj path vector / blas vector
+         * index into the texture vector,
+         * used to create info for each BLAS instance, and used in the GPU for object info */
+
+        std::vector<scene::geometry::ObjectCreateInfo> objectCreateInfos = {};
+        objectCreateInfos.push_back( scene::geometry::ObjectCreateInfo {
+            vk::TransformMatrixKHR{
+                    std::array<std::array<float, 4>, 3>{{
+                                                                {1.0f, 0.0f, 0.0f, 5.0f},  // Translate X by 5 units
+                                                                {0.0f, 1.0f, 0.0f, 0.0f},
+                                                                {0.0f, 0.0f, 1.0f, 0.0f}
+                                                        }}},
+            0,  // Index into objPaths (i.e., pig_head.obj)
+            0   // Index into textures
+        });
+
+        objectCreateInfos.push_back( scene::geometry::ObjectCreateInfo {
+                vk::TransformMatrixKHR{
+                        std::array<std::array<float, 4>, 3>{{
+                                                                    {1.0f, 0.0f, 0.0f, 0.0f},  // Translate X by 0 units
+                                                                    {0.0f, 1.0f, 0.0f, 0.0f},
+                                                                    {0.0f, 0.0f, 1.0f, 0.0f}
+                                                            }}},
+                0,  // Index into objPaths (i.e., pig_head.obj)
+                0   // Index into textures
+        });
+
+        objectCreateInfos.push_back( scene::geometry::ObjectCreateInfo {
+                vk::TransformMatrixKHR{
+                        std::array<std::array<float, 4>, 3>{{
+                                                                    {1.0f, 0.0f, 0.0f, -5.0f},  // Translate X by -5 units
+                                                                    {0.0f, 1.0f, 0.0f, 0.0f},
+                                                                    {0.0f, 0.0f, 1.0f, 0.0f}
+                                                            }}},
+                1,  // Index into objPaths (i.e., pig_head.obj)
+                1   // Index into textures
+        });
+
+        objectCreateInfos.push_back( scene::geometry::ObjectCreateInfo {
+                vk::TransformMatrixKHR{
+                        std::array<std::array<float, 4>, 3>{{
+                                                                    {1.0f, 0.0f, 0.0f, -2.0f},  // Translate X by -5 units
+                                                                    {0.0f, 1.0f, 0.0f, 0.0f},
+                                                                    {0.0f, 0.0f, 1.0f, 2.0f}
+                                                            }}},
+                1,  // Index into objPaths (i.e., pig_head.obj)
+                1   // Index into textures
+        });
+
+
+
+        auto geoReturnInfo = app::setup::GeometryBuilder::createTLASFromOBJsAndTransforms(*device_, commandPool, objPaths, objectCreateInfos);
         std::vector<glm::vec3>                     vertexPositions = geoReturnInfo.vertexPositions;
         std::vector<scene::geometry::Vertex>       vertices = geoReturnInfo.vertices;
         std::vector<uint32_t>                      indices = geoReturnInfo.indices;
         std::unique_ptr<vulkan::raytracing::TLAS>  tlas = std::move(geoReturnInfo.tlas);
+        vulkan::memory::Buffer                     vertexPositionBuffer = std::move(geoReturnInfo.vertexBuffer);
+        vulkan::memory::Buffer                     indexBuffer = std::move(geoReturnInfo.indexBuffer);
 
         // create shader vertex buffer
         vk::DeviceSize verticesSize = sizeof(scene::geometry::Vertex) * vertices.size();
@@ -157,14 +191,24 @@ public:
                                               vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress
                                               | vk::BufferUsageFlagBits::eTransferDst, vertexDataRegions);
 
-        vk::DeviceSize indicesSize = sizeof(uint32_t) * indices.size(); // TODO figure out how to just pass the objectBuffer with an offset
-        std::vector<vulkan::memory::Buffer::FillRegion> indexDataRegions {
-                {indices.data() , indicesSize, 0},
-        };
-        vulkan::memory::Buffer indexBuffer = vulkan::memory::Buffer::createDeviceLocalBuffer(commandPool, *device_, indicesSize,
-                                                                                              vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress
-                                                                                              | vk::BufferUsageFlagBits::eTransferDst, indexDataRegions);
+//        vk::DeviceSize indicesSize = sizeof(uint32_t) * indices.size(); // TODO figure out how to just pass the objectBuffer with an offset
+//        std::vector<vulkan::memory::Buffer::FillRegion> indexDataRegions {
+//                {indices.data() , indicesSize, 0},
+//        };
+//        vulkan::memory::Buffer indexBuffer = vulkan::memory::Buffer::createDeviceLocalBuffer(commandPool, *device_, indicesSize,
+//                                                                                              vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress
+//                                                                                              | vk::BufferUsageFlagBits::eTransferDst, indexDataRegions);
 
+
+
+        std::vector<vulkan::raytracing::TLAS::BLASInstanceInfo> blasInfos = tlas->getBLASInfos();
+        vk::DeviceSize blasInfosSize = blasInfos.size() * sizeof(vulkan::raytracing::TLAS::BLASInstanceInfo);
+        std::vector<vulkan::memory::Buffer::FillRegion> blasInfoDataRegions {
+                {blasInfos.data() , blasInfosSize, 0},
+        };
+        vulkan::memory::Buffer blasInfoBuffer = vulkan::memory::Buffer::createDeviceLocalBuffer(commandPool, *device_, blasInfos.size() * sizeof(vulkan::raytracing::TLAS::BLASInstanceInfo),
+                                                                                               vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress
+                                                                                               | vk::BufferUsageFlagBits::eTransferDst, blasInfoDataRegions); // TODO make into a uniform buffer
 
         /* JUST FOR TESTING */
         // FOR NOW JUST ONE DESCRIPTOR SET
@@ -176,28 +220,32 @@ public:
         layout.addBinding(2, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR);  // camera
         layout.addBinding(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR); // vertex buffer
         layout.addBinding(4, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR);
-        layout.addBinding(5, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eClosestHitKHR);
+        layout.addBinding(5, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eClosestHitKHR, static_cast<uint32_t>(textureImages.size()));
+        layout.addBinding(6, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR);
+        layout.addBinding(7, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR);
         layout.build();
 
         // We need this to happen automatically based off of needs
         std::vector<vk::DescriptorPoolSize> poolSizes = {
                 {vk::DescriptorType::eStorageImage, 1},
-                {vk::DescriptorType::eStorageBuffer, 2},
+                {vk::DescriptorType::eStorageBuffer, 4},
                 {vk::DescriptorType::eUniformBuffer, 1},
                 {vk::DescriptorType::eAccelerationStructureKHR, 1},
-                {vk::DescriptorType::eCombinedImageSampler, 1}
+                {vk::DescriptorType::eCombinedImageSampler, static_cast<uint32_t>(textureImages.size())}
         };
 
         vulkan::memory::DescriptorPool pool(device_->get(), poolSizes, 3);
         vk::DescriptorSet set = pool.allocate(layout)[0];
 
-        static_assert(sizeof(scene::geometry::Vertex) == 48, "Vertex size must match shader layout");
+        static_assert(sizeof(scene::geometry::Vertex) == 32, "Vertex size must match shader layout");
         pool.writeImage(set, 0, outputImage.getImageInfo(), vk::DescriptorType::eStorageImage);
         pool.writeAccelerationStructure(set, 1, vk::DescriptorType::eAccelerationStructureKHR, tlas->get());
         pool.writeBuffer(set, 2, cameraBuffer, sizeof(scene::Camera::GPUCameraData), vk::DescriptorType::eUniformBuffer, 0);
         pool.writeBuffer(set, 3, vertexBuffer.get(), sizeof(scene::geometry::Vertex) * vertices.size() , vk::DescriptorType::eStorageBuffer, 0);
         pool.writeBuffer(set, 4, indexBuffer.get(), indices.size() * sizeof(uint32_t), vk::DescriptorType::eStorageBuffer, 0);
-        pool.writeImage(set, 5, textureImage->getImageInfoWithSampler(texSampler.get()), vk::DescriptorType::eCombinedImageSampler);
+        pool.writeImages(set, 5, descriptorTextures, vk::DescriptorType::eCombinedImageSampler);
+        pool.writeBuffer(set, 6, blasInfoBuffer.get(), blasInfosSize, vk::DescriptorType::eStorageBuffer, 0);
+        pool.writeBuffer(set, 7, vertexPositionBuffer.get(), vertices.size() * sizeof(glm::vec3), vk::DescriptorType::eStorageBuffer, 0);
 
         std::vector<vk::DescriptorSetLayout> descriptorLayouts{layout.get()};
 
