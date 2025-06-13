@@ -144,7 +144,7 @@ namespace vulkan::context {
             info.imageColorSpace  = formats[0].colorSpace;
             info.imageExtent      = extent_;
             info.imageArrayLayers = 1;
-            info.imageUsage       = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferDst;
+            info.imageUsage       = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eColorAttachment;
             info.imageSharingMode = vk::SharingMode::eExclusive;
             info.preTransform     = caps.currentTransform;
             info.compositeAlpha   = vk::CompositeAlphaFlagBitsKHR::eOpaque;

@@ -18,9 +18,11 @@ public:
             uint32_t maxSets
     );
 
-    void writeBuffer(vk::DescriptorSet set, uint32_t binding, vk::Buffer buffer, vk::DeviceSize size, vk::DescriptorType type = vk::DescriptorType::eUniformBuffer);
+    void writeBuffer(vk::DescriptorSet set, uint32_t binding, vk::Buffer buffer, vk::DeviceSize size, vk::DescriptorType type, vk::DeviceSize offset);
 
     void writeImage(vk::DescriptorSet set, uint32_t binding, const vk::DescriptorImageInfo& imageInfo, vk::DescriptorType type);
+
+    void writeImages(vk::DescriptorSet set, uint32_t binding, const std::vector<vk::DescriptorImageInfo>& imageInfos, vk::DescriptorType type);
 
     void writeAccelerationStructure(vk::DescriptorSet set, uint32_t binding, vk::DescriptorType type, vk::AccelerationStructureKHR TLAS);
 
@@ -103,7 +105,7 @@ std::vector<vk::DescriptorSet> DescriptorPool::allocate(const DescriptorSetLayou
 }
 
 // TODO maybe move this out of pool, or combine into one function
-void DescriptorPool::writeBuffer(vk::DescriptorSet set, uint32_t binding, vk::Buffer buffer, vk::DeviceSize size, vk::DescriptorType type) {
+void DescriptorPool::writeBuffer(vk::DescriptorSet set, uint32_t binding, vk::Buffer buffer, vk::DeviceSize size, vk::DescriptorType type, vk::DeviceSize offset) {
     vk::DescriptorBufferInfo bufferInfo{ buffer, 0, size };
     vk::WriteDescriptorSet write{
             set, binding, 0, 1, type, nullptr, &bufferInfo, nullptr
@@ -132,4 +134,21 @@ void DescriptorPool::writeAccelerationStructure(vk::DescriptorSet set, uint32_t 
 
     device_.updateDescriptorSets(write, {});
 }
+
+void DescriptorPool::writeImages(vk::DescriptorSet set, uint32_t binding, const std::vector<vk::DescriptorImageInfo>& imageInfos, vk::DescriptorType type) {
+    if (imageInfos.empty()) {
+        throw std::runtime_error("writeImages: imageInfos is empty.");
+    }
+
+    vk::WriteDescriptorSet write{};
+    write.dstSet = set;
+    write.dstBinding = binding;
+    write.dstArrayElement = 0;
+    write.descriptorCount = static_cast<uint32_t>(imageInfos.size());
+    write.descriptorType = type;
+    write.pImageInfo = imageInfos.data();
+
+    device_.updateDescriptorSets(write, {});
+}
+
 } // namespace vulkan

@@ -8,22 +8,20 @@ namespace vulkan::memory {
 
     export class Image {
     public:
-        Image(vk::Device device,
-              vk::PhysicalDevice physical,
-              vk::Extent3D extent,
-              vk::Format format,
-              vk::ImageUsageFlags usage,
-              vk::ImageAspectFlags aspect,
-              vk::MemoryPropertyFlags properties = vk::MemoryPropertyFlagBits::eDeviceLocal);
+        Image(vk::Device device, vk::PhysicalDevice physical, vk::Extent3D extent, vk::Format format,
+              vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect, vk::MemoryPropertyFlags properties = vk::MemoryPropertyFlagBits::eDeviceLocal);
 
         vk::Image getImage() const noexcept { return image_.get(); }
         vk::ImageView getView() const noexcept { return view_.get(); }
         vk::Extent3D getExtent() const noexcept { return extent_; }
         vk::Format getFormat() const noexcept { return format_; }
         vk::DescriptorImageInfo getImageInfo();
+        vk::DescriptorImageInfo getImageInfoWithSampler(vk::Sampler sampler);
 
-        static void setImageLayout(vk::CommandBuffer commandBuffer, vk::Image image, vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
         static vk::AccessFlags toAccessFlags(vk::ImageLayout layout);
+
+        static void setImageLayout(vk::CommandBuffer& commandBuffer, const vk::Image& image,const vk::ImageLayout& oldLayout,const vk::ImageLayout& newLayout);
+        static void copyBufferToImage(vk::CommandBuffer& commandBuffer,const vk::Buffer& buffer,const vk::Image& image, const vk::Extent3D& extent);
         static void copyImage(vk::CommandBuffer commandBuffer, vk::Image srcImage, vk::Image dstImage, vk::Extent3D extent);
 
     private:
@@ -88,7 +86,7 @@ namespace vulkan::memory {
         device_.bindImageMemory(image_.get(), memory_.get(), 0);
 
         // Create view
-        vk::ImageViewCreateInfo viewInfo{};
+        vk::ImageViewCreateInfo viewInfo{}; // TODO I don't think we need this for all images
         viewInfo.image = image_.get();
         viewInfo.viewType = vk::ImageViewType::e2D;
         viewInfo.format = format;
@@ -110,7 +108,16 @@ namespace vulkan::memory {
         return imageInfo;
     };
 
-    void Image::setImageLayout(vk::CommandBuffer commandBuffer, vk::Image image, vk::ImageLayout oldLayout, vk::ImageLayout newLayout) {
+    vk::DescriptorImageInfo Image::getImageInfoWithSampler(vk::Sampler sampler) {
+        vk::DescriptorImageInfo imageInfo{};
+        imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal; // required for textures
+        imageInfo.imageView = view_.get();
+        imageInfo.sampler = sampler; // not needed for storage images
+
+        return imageInfo;
+    }
+
+    void Image::setImageLayout(vk::CommandBuffer& commandBuffer, const vk::Image& image,const vk::ImageLayout& oldLayout,const vk::ImageLayout& newLayout) {
         vk::ImageMemoryBarrier barrier;
         barrier.setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
         barrier.setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
@@ -144,6 +151,22 @@ namespace vulkan::memory {
         commandBuffer.copyImage(srcImage, vk::ImageLayout::eTransferSrcOptimal, dstImage, vk::ImageLayout::eTransferDstOptimal, copyRegion);
     }
 
+    void Image::copyBufferToImage(vk::CommandBuffer& commandBuffer,const vk::Buffer& buffer,const vk::Image& image, const vk::Extent3D& extent) {
+        vk::BufferImageCopy region{};
+        region.bufferOffset = 0;
+        region.bufferRowLength = 0;
+        region.bufferImageHeight = 0;
+
+        region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+        region.imageSubresource.mipLevel = 0;
+        region.imageSubresource.baseArrayLayer = 0;
+        region.imageSubresource.layerCount = 1;
+
+        region.imageOffset = vk::Offset3D{0, 0, 0};
+        region.imageExtent = extent;
+
+        commandBuffer.copyBufferToImage(buffer, image, vk::ImageLayout::eTransferDstOptimal, region);
+    }
 
 
 } // namespace vulkan::memory
