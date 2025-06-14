@@ -107,12 +107,12 @@ export namespace app {
             vk::Buffer cameraBuffer = camera_->getBuffer();
 
             // obj and texture vectors with indices matching
-            std::vector<std::string> objPaths = { "../../assets/objects/pig_head.obj" ,        // 0
-                                                  "../../assets/objects/rubber_toy.obj"};  // 1
+            //std::vector<std::string> objPaths = { "../../assets/objects/toycar.obj" ,        // 0
+            //                                      "../../assets/objects/carstand.obj"};  // 1
 
             std::vector<std::unique_ptr<vulkan::memory::Image>> textureImages;
-            textureImages.push_back(core::file::createTextureImage(*device_, "../../assets/textures/pig_head_tex.jpg", commandPool));        // 0
-            textureImages.push_back(core::file::createTextureImage(*device_, "../../assets/textures/rubber_toy.jpg", commandPool));          // 1
+            //textureImages.push_back(core::file::createTextureImage(*device_, "../../assets/textures/0.png", commandPool));        // 0
+            //textureImages.push_back(core::file::createTextureImage(*device_, "../../assets/textures/car_stand_color.png", commandPool));          // 1
 
             // Sets up the textures
             vulkan::memory::ImageSampler texSampler(*device_.get());
@@ -131,9 +131,9 @@ export namespace app {
             objectCreateInfos.push_back( scene::geometry::ObjectCreateInfo {
                     vk::TransformMatrixKHR{
                             std::array<std::array<float, 4>, 3>{{
-                                                                        {1.0f, 0.0f, 0.0f, 5.0f},  // Translate X by 5 units
-                                                                        {0.0f, 1.0f, 0.0f, 0.0f},
-                                                                        {0.0f, 0.0f, 1.0f, 0.0f}
+                                                                        {100.0f, 0.0f, 0.0f, 0.0f},  // Translate X by 5 units
+                                                                        {0.0f, 100.0f, 0.0f, 0.0f},
+                                                                        {0.0f, 0.0f, 100.0f, 0.0f}
                                                                 }}},
                     0,  // Index into objPaths (i.e., pig_head.obj)
                     0   // Index into textures
@@ -142,31 +142,9 @@ export namespace app {
             objectCreateInfos.push_back( scene::geometry::ObjectCreateInfo {
                     vk::TransformMatrixKHR{
                             std::array<std::array<float, 4>, 3>{{
-                                                                        {1.0f, 0.0f, 0.0f, 0.0f},  // Translate X by 0 units
-                                                                        {0.0f, 1.0f, 0.0f, 0.0f},
-                                                                        {0.0f, 0.0f, 1.0f, 0.0f}
-                                                                }}},
-                    0,  // Index into objPaths (i.e., pig_head.obj)
-                    0   // Index into textures
-            });
-
-            objectCreateInfos.push_back( scene::geometry::ObjectCreateInfo {
-                    vk::TransformMatrixKHR{
-                            std::array<std::array<float, 4>, 3>{{
-                                                                        {1.0f, 0.0f, 0.0f, -5.0f},  // Translate X by -5 units
-                                                                        {0.0f, 1.0f, 0.0f, 0.0f},
-                                                                        {0.0f, 0.0f, 1.0f, 0.0f}
-                                                                }}},
-                    1,  // Index into objPaths (i.e., pig_head.obj)
-                    1   // Index into textures
-            });
-
-            objectCreateInfos.push_back( scene::geometry::ObjectCreateInfo {
-                    vk::TransformMatrixKHR{
-                            std::array<std::array<float, 4>, 3>{{
-                                                                        {1.0f, 0.0f, 0.0f, -2.0f},  // Translate X by -5 units
-                                                                        {0.0f, 1.0f, 0.0f, 0.0f},
-                                                                        {0.0f, 0.0f, 1.0f, 2.0f}
+                                                                        {100.0f, 0.0f, 0.0f, 0.0f},  // Translate X by 0 units
+                                                                        {0.0f, 100.0f, 0.0f, 0.0f},
+                                                                        {0.0f, 0.0f, 100.0f, 0.0f}
                                                                 }}},
                     1,  // Index into objPaths (i.e., pig_head.obj)
                     1   // Index into textures
@@ -191,7 +169,7 @@ export namespace app {
                                                                                                   vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress
                                                                                                   | vk::BufferUsageFlagBits::eTransferDst, vertexDataRegions);
 
-            auto hdriImage = core::file::createTextureImage(*device_.get(), "../../assets/textures/pisztyk_4k.hdr", commandPool);
+            auto hdriImage = core::file::createTextureImage(*device_.get(), "../../assets/textures/sky4k.hdr", commandPool);
             vulkan::memory::ImageSampler hdriSampler(*device_.get());
 
 

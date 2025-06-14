@@ -11,6 +11,46 @@ layout(location = 1) rayPayloadEXT bool isShadowed;
 
 hitAttributeEXT vec2 attribs;
 
+const float PI = 3.14159265359;
+
+
+float chiGGX(float v)
+{
+    return v > 0 ? 1 : 0;
+}
+// n = surface normal
+// h = the half vector between view and light,
+// v = view direction (towards camera)
+
+float GGX_Distribution(vec3 n, vec3 h, float alpha)  // output how much a particular microfacet orientation contributes
+{
+    float NoH = dot(n,h);
+    float alpha2 = alpha * alpha;
+    float NoH2 = NoH * NoH;
+    float den = max(NoH2 * alpha2 + (1.0 - NoH2), 0.001);
+    return (chiGGX(NoH) * alpha2) / ( PI * den * den );
+}
+
+float GGX_PartialGeometryTerm(vec3 v, vec3 n, vec3 h, float alpha) // output how much the light is reduced by microfacet shadows, bounces, etc.
+{
+    float VoH2 = clamp(dot(v, h), 0.001, 1.0);
+    float chi = chiGGX( VoH2 / clamp(dot(v, n), 0.001, 1.0) );
+    VoH2 = VoH2 * VoH2;
+    float tan2 = ( 1 - VoH2 ) / VoH2;
+    return (chi * 2) / ( 1 + sqrt( 1 + alpha * alpha * tan2 ) );
+}
+
+// cosT = the angle between the viewing direction and the half vector
+// F0 = the materials response at normal incidence calculated as follows
+// float3 F0 = abs ((1.0 - ior) / (1.0 + ior));
+// F0 = F0 * F0;
+// F0 = lerp(F0, materialColour.rgb, metallic);
+
+vec3 Fresnel_Schlick(float cosT, vec3 F0) // output the way the light interacts with the surface at different angles
+{
+  return F0 + (1.0 - F0) * pow( 1 - cosT, 5.0);
+}
+
 struct Vertex {
     vec3 normal;   float pad1;
     vec2 uv;       vec2  pad2;
@@ -46,7 +86,7 @@ layout(set = 0, binding = 4) readonly buffer IndexBuffer {
     uint indices[];
 };
 
-layout(set = 0, binding = 4) readonly buffer VertexPositionBuffer {
+layout(set = 0, binding = 7) readonly buffer VertexPositionBuffer {
     vec3 vertexPositions[];
 };
 
@@ -57,6 +97,8 @@ layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
 layout(set = 0, binding = 5) uniform sampler2D texSamplers[];
 
 void main() {
+
+
     BLASInstanceInfo blasInfo = blasInfos[gl_InstanceCustomIndexEXT];
     uint vertexOffset = blasInfo.vertexIndexOffset;
     uint indexOffset = blasInfo.indexIndexOffset;
@@ -76,29 +118,48 @@ void main() {
 
     vec3 bary = vec3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
     vec3 localPos = v0position * bary.x + v1position * bary.y + v2position * bary.z;
-    vec3 worldPos = vec3(gl_ObjectToWorldEXT * vec4(localPos, 1.0));
+    vec3 hitPoint = vec3(gl_ObjectToWorldEXT * vec4(localPos, 1.0));
     vec3 interpolatedLocalNormal = normalize(v0.normal * bary.x + v1.normal * bary.y + v2.normal * bary.z);
-    vec3 interpolatedWorldNormal = normalize(mat3(gl_ObjectToWorldEXT) * interpolatedLocalNormal);
+    vec3 hitNormal = normalize(mat3(gl_ObjectToWorldEXT) * interpolatedLocalNormal);
     vec2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
 
+    vec3 surfaceColor = texture(nonuniformEXT(texSamplers[blasInfo.textureIndex]), uv).rgb;
     vec3 lightColor = vec3(1.0, 0.95, 0.9);
-    float lightIntensity = 1.0;
-    vec3 lightDir = normalize(vec3(-1, 3, 0));
-    vec3 viewDir = normalize(cam.position - worldPos);
+    float lightIntensity = 2.0;
+    vec3 lightDir = normalize(vec3(0, 1, 0));
+    vec3 viewDir = normalize(cam.position - hitPoint);
+    vec3 halfVector = normalize(lightDir + viewDir);
 
-    // Use nonuniform qualifier for dynamic indexing
-    vec3 baseColor = texture(nonuniformEXT(texSamplers[blasInfo.textureIndex]), uv).rgb;
+    float roughness = 0.2;  // GET FROM ROUGHNESS MAP
+    vec3 ior = vec3(1.5); // GET FROM MAP, OR DONT
+    float metallic = 0.0; // GET FROM MAP
 
-    vec3 ambientColor = vec3(0.2, 0.2, 0.2);
-    float diff = max(dot(interpolatedWorldNormal, lightDir), 0.0);
-    vec3 reflectDir = reflect(-lightDir, interpolatedWorldNormal);
-    float specStrength = 0.3;
-    float shininess = 12.0;
-    float spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess);
+    vec3 F0 = abs((1.0 - ior) / (1.0 + ior));
+    F0 = F0 * F0;
+    F0 = mix(F0, surfaceColor, metallic);
+    float cosTheta = clamp(dot(viewDir, halfVector), 0.0, 1.0);
 
-    vec3 color = ambientColor * baseColor +
-                 diff * baseColor * lightColor * lightIntensity +
-                 spec * specStrength * lightColor * lightIntensity;
+    float D = GGX_Distribution(hitNormal, halfVector, roughness);
+    float G = GGX_PartialGeometryTerm(viewDir, hitNormal, halfVector, roughness) * GGX_PartialGeometryTerm(lightDir, hitNormal, halfVector, roughness);
+    vec3 F = Fresnel_Schlick(cosTheta, F0);
+
+    float NdotV = max(dot(hitNormal, viewDir), 0.01);
+    float NdotL = max(dot(hitNormal, lightDir), 0.01);
+
+    vec3 specular = (D * F * G) / (4.0 * NdotV * NdotL);
+
+    vec3 kD = vec3(1.0) - F;           // Energy conservation
+    kD *= 1.0 - metallic;              // Lambert Diffuse
+
+    vec3 diffuse = (surfaceColor / PI) * kD;
+
+
+    vec3 radiance = lightColor * lightIntensity * NdotL;  // incoming light
+
+    vec3 color = (specular + diffuse) * radiance;
+
+    vec3 ambient = vec3(0.03) * surfaceColor;  // or indirect lighting / GI
+    color += ambient;
 
     payload = color;
 }
