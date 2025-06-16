@@ -27,4 +27,22 @@ float random(int seed) {
     return float(hash) / 4294967296.0;
 }
 
+struct BLASInstanceInfo {
+    uint vertexIndexOffset;
+    uint indexIndexOffset;
+    uint textureIndex;
+    uint _padding; // std430 requires 16-byte alignment
+};
+
+struct RayPayload {
+    vec3 primaryColor;
+    vec3 reflectionColor;
+    int depth;
+};
+
+
+struct ShadowRayPayload {
+    bool isShadowed;
+};
+
 #endif

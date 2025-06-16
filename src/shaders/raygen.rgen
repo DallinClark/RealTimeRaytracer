@@ -13,7 +13,7 @@ layout(set = 0, binding = 2) uniform CameraUBO {
     GPUCameraData cam;
 };
 
-layout(location = 0) rayPayloadEXT CombinedPayload payload;
+layout(location = 0) rayPayloadEXT RayPayload payload;
 
 void main() {
     const ivec2 pixelCoord = ivec2(gl_LaunchIDEXT.xy);
@@ -32,8 +32,9 @@ void main() {
         const vec3 rayOrigin = cam.position;
         const vec3 rayDirection = normalize(pixelWorldPos - rayOrigin);
 
-        payload.color = vec3(0.0);
-        payload.depth = 0;
+        payload.primaryColor = vec3(0.0);
+        payload.reflectionColor = vec3(1.0);
+        payload.depth = 1;
 
         traceRayEXT(
             topLevelAS,
@@ -45,7 +46,7 @@ void main() {
             0
         );
 
-        accumulatedColor += payload.color;
+        accumulatedColor += payload.primaryColor;
     }
 
     accumulatedColor /= float(NUM_PRIMARY_RAYS);

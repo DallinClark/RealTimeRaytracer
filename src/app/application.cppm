@@ -8,6 +8,7 @@ module;
 #include <stdexcept>
 #include <memory>
 #include <string_view>
+#include <filesystem>
 
 export module app;
 
@@ -33,6 +34,7 @@ import scene.camera;
 import scene.geometry.vertex;
 import scene.geometry.triangle;
 import scene.geometry.object;
+import scene.textures.texture;
 
 import app.setup.geometry_builder;
 
@@ -107,18 +109,23 @@ export namespace app {
             vk::Buffer cameraBuffer = camera_->getBuffer();
 
             // obj and texture vectors with indices matching
-            std::vector<std::string> objPaths = { "../../assets/objects/pig_head.obj" ,        // 0
-                                                  "../../assets/objects/rubber_toy.obj"};  // 1
+            std::vector<std::string> objPaths = { "../../assets/objects/toycar/toycar.obj",      // 0
+                                                  "../../assets/objects/toycar/car_stand.obj",
+                                                  "../../assets/objects/basic_geo/cube.obj"};  // 1
 
-            std::vector<std::unique_ptr<vulkan::memory::Image>> textureImages;
-            textureImages.push_back(core::file::createTextureImage(*device_, "../../assets/textures/pig_head_tex.jpg", commandPool));        // 0
-            textureImages.push_back(core::file::createTextureImage(*device_, "../../assets/textures/rubber_toy.jpg", commandPool));          // 1
+            std::vector<scene::textures::Texture> textures;
+            textures.push_back(scene::textures::Texture(*device_, commandPool, "../../assets/textures/toycar/toycar_color.png", "../../assets/textures/toycar/toycar_occlusion_roughness_metallic.png"));
+            textures.push_back(scene::textures::Texture(*device_, commandPool, "../../assets/textures/toycar/car_stand_color.png", "","",""));
+            textures.push_back(scene::textures::Texture(*device_, commandPool, "../../assets/textures/basic/gray.png", "", "", ""));
 
             // Sets up the textures
             vulkan::memory::ImageSampler texSampler(*device_.get());
             std::vector<vk::DescriptorImageInfo> descriptorTextures = {};
-            for (const auto& image : textureImages) {
-                descriptorTextures.push_back(image->getImageInfoWithSampler(texSampler.get()));
+            for (const auto& texture : textures) {
+                const vulkan::memory::Image& colorImage = texture.getColorImage();
+                const vulkan::memory::Image&  materialImage = texture.getMaterialImage();
+                descriptorTextures.push_back(colorImage.getImageInfoWithSampler(texSampler.get()));
+                descriptorTextures.push_back(materialImage.getImageInfoWithSampler(texSampler.get()));
             }
 
             /* create info for each of the objects, in this order:
@@ -131,9 +138,9 @@ export namespace app {
             objectCreateInfos.push_back( scene::geometry::ObjectCreateInfo {
                     vk::TransformMatrixKHR{
                             std::array<std::array<float, 4>, 3>{{
-                                                                        {1.0f, 0.0f, 0.0f, 5.0f},  // Translate X by 5 units
-                                                                        {0.0f, 1.0f, 0.0f, 0.0f},
-                                                                        {0.0f, 0.0f, 1.0f, 0.0f}
+                                                                        {100.0f, 0.0f, 0.0f, 0.0f},  // Translate X by 5 units
+                                                                        {0.0f, 100.0f, 0.0f, 0.0f},
+                                                                        {0.0f, 0.0f, 100.0f, 0.0f}
                                                                 }}},
                     0,  // Index into objPaths (i.e., pig_head.obj)
                     0   // Index into textures
@@ -142,20 +149,9 @@ export namespace app {
             objectCreateInfos.push_back( scene::geometry::ObjectCreateInfo {
                     vk::TransformMatrixKHR{
                             std::array<std::array<float, 4>, 3>{{
-                                                                        {1.0f, 0.0f, 0.0f, 0.0f},  // Translate X by 0 units
-                                                                        {0.0f, 1.0f, 0.0f, 0.0f},
-                                                                        {0.0f, 0.0f, 1.0f, 0.0f}
-                                                                }}},
-                    0,  // Index into objPaths (i.e., pig_head.obj)
-                    0   // Index into textures
-            });
-
-            objectCreateInfos.push_back( scene::geometry::ObjectCreateInfo {
-                    vk::TransformMatrixKHR{
-                            std::array<std::array<float, 4>, 3>{{
-                                                                        {1.0f, 0.0f, 0.0f, -5.0f},  // Translate X by -5 units
-                                                                        {0.0f, 1.0f, 0.0f, 0.0f},
-                                                                        {0.0f, 0.0f, 1.0f, 0.0f}
+                                                                        {100.0f, 0.0f, 0.0f, 0.0f},  // Translate X by 0 units
+                                                                        {0.0f, 100.0f, 0.0f, 0.0f},
+                                                                        {0.0f, 0.0f, 100.0f, 0.0f}
                                                                 }}},
                     1,  // Index into objPaths (i.e., pig_head.obj)
                     1   // Index into textures
@@ -164,13 +160,14 @@ export namespace app {
             objectCreateInfos.push_back( scene::geometry::ObjectCreateInfo {
                     vk::TransformMatrixKHR{
                             std::array<std::array<float, 4>, 3>{{
-                                                                        {1.0f, 0.0f, 0.0f, -2.0f},  // Translate X by -5 units
-                                                                        {0.0f, 1.0f, 0.0f, 0.0f},
-                                                                        {0.0f, 0.0f, 1.0f, 2.0f}
+                                                                        {5.0f, 0.0f, 0.0f, 0.0f},  // Translate X by 0 units
+                                                                        {0.0f, 1.0f, 0.0f, -5.09f},
+                                                                        {0.0f, 0.0f, 5.0f, 0.0f}
                                                                 }}},
-                    1,  // Index into objPaths (i.e., pig_head.obj)
-                    1   // Index into textures
+                    2,  // Index into objPaths (i.e., pig_head.obj)
+                    2   // Index into textures
             });
+
 
 
 
@@ -191,7 +188,7 @@ export namespace app {
                                                                                                   vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress
                                                                                                   | vk::BufferUsageFlagBits::eTransferDst, vertexDataRegions);
 
-            auto hdriImage = core::file::createTextureImage(*device_.get(), "../../assets/textures/pisztyk_4k.hdr", commandPool);
+            auto hdriImage = core::file::createTextureImage(*device_.get(), "../../assets/textures/hdris/sky4k.hdr", commandPool);
             vulkan::memory::ImageSampler hdriSampler(*device_.get());
 
 
@@ -210,11 +207,11 @@ export namespace app {
             // Create the camera
 
             layout.addBinding(0, vk::DescriptorType::eStorageImage,  vk::ShaderStageFlagBits::eRaygenKHR); // image
-            layout.addBinding(1, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR);  // TLAS
+            layout.addBinding(1, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR);  // TLAS
             layout.addBinding(2, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR);  // camera
             layout.addBinding(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR); // vertex buffer
             layout.addBinding(4, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR);
-            layout.addBinding(5, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eClosestHitKHR, static_cast<uint32_t>(textureImages.size()));
+            layout.addBinding(5, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eClosestHitKHR, static_cast<uint32_t>(descriptorTextures.size()));
             layout.addBinding(6, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR);
             layout.addBinding(7, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR);
             layout.addBinding(8, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eMissKHR);
@@ -227,13 +224,12 @@ export namespace app {
                     {vk::DescriptorType::eStorageBuffer, 4},
                     {vk::DescriptorType::eUniformBuffer, 1},
                     {vk::DescriptorType::eAccelerationStructureKHR, 1},
-                    {vk::DescriptorType::eCombinedImageSampler, static_cast<uint32_t>(textureImages.size()) + 1}
+                    {vk::DescriptorType::eCombinedImageSampler, static_cast<uint32_t>(descriptorTextures.size()) + 1}
             };
 
             vulkan::memory::DescriptorPool pool(device_->get(), poolSizes, 3);
             vk::DescriptorSet set = pool.allocate(layout)[0];
 
-            static_assert(sizeof(scene::geometry::Vertex) == 32, "Vertex size must match shader layout");
             pool.writeImage(set, 0, outputImage.getImageInfo(), vk::DescriptorType::eStorageImage);
             pool.writeAccelerationStructure(set, 1, vk::DescriptorType::eAccelerationStructureKHR, tlas->get());
             pool.writeBuffer(set, 2, cameraBuffer, sizeof(scene::Camera::GPUCameraData), vk::DescriptorType::eUniformBuffer, 0);
@@ -246,7 +242,9 @@ export namespace app {
 
             std::vector<vk::DescriptorSetLayout> descriptorLayouts{layout.get()};
 
-            auto raytracePipeline = vulkan::RayTracingPipeline(*device_, descriptorLayouts, "shaders/spv/raygen.rgen.spv", "shaders/spv/miss.rmiss.spv", "shaders/spv/closesthit.rchit.spv");
+            auto raytracePipeline = vulkan::RayTracingPipeline(*device_, descriptorLayouts, "shaders/spv/raygen.rgen.spv",
+                                                               "shaders/spv/miss.rmiss.spv", "shaders/spv/shadowMiss.rmiss.spv",
+                                                               "shaders/spv/closesthit.rchit.spv");
 
             int frame = 0;
             float currentTime = window_->getTime();

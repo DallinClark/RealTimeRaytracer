@@ -16,7 +16,7 @@ namespace vulkan::memory {
         vk::Extent3D getExtent() const noexcept { return extent_; }
         vk::Format getFormat() const noexcept { return format_; }
         vk::DescriptorImageInfo getImageInfo();
-        vk::DescriptorImageInfo getImageInfoWithSampler(vk::Sampler sampler);
+        vk::DescriptorImageInfo getImageInfoWithSampler(vk::Sampler sampler) const;
 
         static vk::AccessFlags toAccessFlags(vk::ImageLayout layout);
 
@@ -108,7 +108,7 @@ namespace vulkan::memory {
         return imageInfo;
     };
 
-    vk::DescriptorImageInfo Image::getImageInfoWithSampler(vk::Sampler sampler) {
+    vk::DescriptorImageInfo Image::getImageInfoWithSampler(vk::Sampler sampler) const {
         vk::DescriptorImageInfo imageInfo{};
         imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal; // required for textures
         imageInfo.imageView = view_.get();
