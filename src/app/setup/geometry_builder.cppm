@@ -93,6 +93,7 @@ export namespace app::setup  {
             meshDatas.push_back(meshData);
         }
 
+
         // creates the index and vertex buffers
         vk::DeviceSize vertexBufferSize = vertexPositions.size() * sizeof(glm::vec3);
         vk::DeviceSize indexBufferSize  = indices.size() * sizeof(uint32_t);

@@ -38,17 +38,6 @@ export namespace core::file {
         return buffer;
     }
 
-    struct Vec3Hasher {
-        size_t operator()(const glm::vec3& v) const {
-            std::hash<float> hasher;
-            size_t h1 = hasher(v.x);
-            size_t h2 = hasher(v.y);
-            size_t h3 = hasher(v.z);
-            return ((h1 ^ (h2 << 1)) >> 1) ^ (h3 << 1);
-        }
-    };
-
-
     void loadModel(const std::string& modelPath, std::vector<glm::vec3>& vertexPositions, std::vector<uint32_t>& indices, std::vector<scene::geometry::Vertex>& vertices) {
         tinyobj::attrib_t attrib;
         std::vector<tinyobj::shape_t> shapes;
@@ -62,14 +51,13 @@ export namespace core::file {
         }
 
         std::unordered_map<scene::geometry::Vertex, uint32_t> uniqueVertices{};
-        std::unordered_map<glm::vec3, uint32_t, Vec3Hasher> uniquePositions{};
 
         for (const auto &shape: shapes) {
             for (const auto &index: shape.mesh.indices) {
                 scene::geometry::Vertex vertex{};
 
                 // Position
-                glm::vec3 position = {
+                vertex.position = {
                         attrib.vertices[3 * index.vertex_index + 0],
                         attrib.vertices[3 * index.vertex_index + 1],
                         attrib.vertices[3 * index.vertex_index + 2]
@@ -98,11 +86,10 @@ export namespace core::file {
                 }
 
                 // Check if vertex is unique
-                if (uniqueVertices.count(vertex) == 0 || uniquePositions.count(position) == 0) {
+                if (uniqueVertices.count(vertex) == 0) {
                     uniqueVertices[vertex] = newVertexCount;
-                    uniquePositions[position] = newVertexCount;
                     vertices.push_back(vertex);
-                    vertexPositions.push_back(position);
+                    vertexPositions.push_back(vertex.position);
                     ++newVertexCount;
                 }
 
@@ -145,4 +132,86 @@ export namespace core::file {
 
         return std::move(textureImage);
     }
+
+    std::unique_ptr<vulkan::memory::Image> createCombinedTextureImage(const vulkan::context::Device& device, vulkan::context::CommandPool& pool,
+            const std::string& occlusionPath, const std::string& roughnessPath, const std::string& metallicPath) {
+        int width = 0, height = 0, channels;
+
+        stbi_uc* occlusionPixels = nullptr;
+        stbi_uc* roughnessPixels = nullptr;
+        stbi_uc* metallicPixels = nullptr;
+
+        // Load each texture (force single channel), if given
+        if (!occlusionPath.empty())
+            occlusionPixels = stbi_load(occlusionPath.c_str(), &width, &height, &channels, 1);
+
+        if (!roughnessPath.empty()) {
+            int w, h;
+            roughnessPixels = stbi_load(roughnessPath.c_str(), &w, &h, &channels, 1);
+            if ((occlusionPixels && (w != width || h != height))) throw std::runtime_error("Texture sizes don't match.");
+            if (!occlusionPixels) { width = w; height = h; }
+        }
+
+        if (!metallicPath.empty()) {
+            int w, h;
+            metallicPixels = stbi_load(metallicPath.c_str(), &w, &h, &channels, 1);
+            if ((occlusionPixels && (w != width || h != height)) ||
+                (roughnessPixels && (w != width || h != height)))
+                throw std::runtime_error("Texture sizes don't match.");
+            if (!occlusionPixels && !roughnessPixels) { width = w; height = h; }
+        }
+
+        if (!(width && height)) {
+            width = 512;
+            height = 512;
+        }
+        const int texSize = width * height;
+
+
+        std::vector<uint8_t> combinedPixels(texSize * 4); // RGBA
+
+        // Fill each channel
+        for (int i = 0; i < texSize; ++i) {
+            combinedPixels[i * 4 + 0] = occlusionPixels  ? occlusionPixels[i]  : 255;  // R
+            combinedPixels[i * 4 + 1] = roughnessPixels  ? roughnessPixels[i]  : 5;  // G
+            combinedPixels[i * 4 + 2] = metallicPixels   ? metallicPixels[i]   : 0;    // B
+            combinedPixels[i * 4 + 3] = 255; // A
+        }
+
+        stbi_image_free(occlusionPixels);
+        stbi_image_free(roughnessPixels);
+        stbi_image_free(metallicPixels);
+
+        vk::DeviceSize imageSize = width * height * 4;
+
+        auto cmd = pool.getSingleUseBuffer();
+
+        vulkan::memory::Buffer stagingBuffer(device, imageSize,
+                                             vk::BufferUsageFlagBits::eTransferSrc,
+                                             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+
+        stagingBuffer.fill(combinedPixels.data(), imageSize);
+
+        vk::Extent3D extent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1 };
+        auto textureImage = std::make_unique<vulkan::memory::Image>(
+                device.get(), device.physical(), extent, vk::Format::eR8G8B8A8Unorm,
+                vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+                vk::ImageAspectFlagBits::eColor
+        );
+
+        vulkan::memory::Image::setImageLayout(cmd.get(), textureImage->getImage(),
+                                              vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+
+        vulkan::memory::Image::copyBufferToImage(cmd.get(), stagingBuffer.get(),
+                                                 textureImage->getImage(), extent);
+
+        vulkan::memory::Image::setImageLayout(cmd.get(), textureImage->getImage(),
+                                              vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+
+        pool.submitSingleUse(std::move(cmd), device.computeQueue());
+
+        return textureImage;
+    }
+
+
 }

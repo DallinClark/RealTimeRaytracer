@@ -6,7 +6,7 @@ import app;
 
 int main() {
     try {
-        app::Application application("Real Time RayTracer", 1600, 1200, /*enableValidation=*/true);
+        app::Application application("Real Time RayTracer", 1920, 1080, /*enableValidation=*/true);
         application.run();
     }
     catch (const std::exception& e) {
