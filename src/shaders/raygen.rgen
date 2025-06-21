@@ -4,7 +4,7 @@
 #extension GL_GOOGLE_include_directive : enable
 #include "raycommon.glsl"
 
-const uint NUM_PRIMARY_RAYS = 10u;
+const uint NUM_PRIMARY_RAYS = 3u;
 
 layout(set = 0, binding = 0, rgba8) uniform image2D image;
 layout(set = 0, binding = 1) uniform accelerationStructureEXT topLevelAS;

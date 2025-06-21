@@ -34,6 +34,7 @@ import scene.camera;
 import scene.geometry.vertex;
 import scene.geometry.triangle;
 import scene.geometry.object;
+import scene.area_light;
 import scene.textures.texture;
 
 import app.setup.geometry_builder;
@@ -108,15 +109,22 @@ export namespace app {
 
             vk::Buffer cameraBuffer = camera_->getBuffer();
 
+            // vector of area lights
+            std::vector<scene::AreaLight> lights = {
+                    {30.0, {0.3,1.0,0.3}, {{-4.0,0.0,-2.0}, {-4.0,0.0,2.0},{-4.0,2.0,2.0},{-4.0,2.0,-2.0}}},
+                    {30.0, {1.0,0.3,0.3}, {{4.0,0.0,-2.0}, {4.0,0.0,2.0},{4.0,2.0,2.0},{4.0,2.0,-2.0}}}
+            };
+
             // obj and texture vectors with indices matching
             std::vector<std::string> objPaths = { "../../assets/objects/toycar/toycar.obj",      // 0
                                                   "../../assets/objects/toycar/car_stand.obj",
                                                   "../../assets/objects/basic_geo/cube.obj"};  // 1
 
             std::vector<scene::textures::Texture> textures;
-            textures.push_back(scene::textures::Texture(*device_, commandPool, "../../assets/textures/toycar/toycar_color.png", "../../assets/textures/toycar/toycar_occlusion_roughness_metallic.png"));
-            textures.push_back(scene::textures::Texture(*device_, commandPool, "../../assets/textures/toycar/car_stand_color.png", "","",""));
-            textures.push_back(scene::textures::Texture(*device_, commandPool, "../../assets/textures/basic/gray.png", "", "", ""));
+            textures.push_back(scene::textures::Texture::createLTCtables(*device_, commandPool)); // 0
+            textures.push_back(scene::textures::Texture(*device_, commandPool, "../../assets/textures/toycar/toycar_color.png", "../../assets/textures/toycar/toycar_occlusion_roughness_metallic.png")); //1
+            textures.push_back(scene::textures::Texture(*device_, commandPool, "../../assets/textures/toycar/car_stand_color.png", "","","")); // 2
+            textures.push_back(scene::textures::Texture(*device_, commandPool, "../../assets/textures/basic/gray.png", "", "", "")); // 3
 
             // Sets up the textures
             vulkan::memory::ImageSampler texSampler(*device_.get());
@@ -143,7 +151,7 @@ export namespace app {
                                                                         {0.0f, 0.0f, 100.0f, 0.0f}
                                                                 }}},
                     0,  // Index into objPaths (i.e., pig_head.obj)
-                    0   // Index into textures
+                    1   // Index into textures
             });
 
             objectCreateInfos.push_back( scene::geometry::ObjectCreateInfo {
@@ -154,9 +162,9 @@ export namespace app {
                                                                         {0.0f, 0.0f, 100.0f, 0.0f}
                                                                 }}},
                     1,  // Index into objPaths (i.e., pig_head.obj)
-                    1   // Index into textures
+                    2   // Index into textures
             });
-
+//
             objectCreateInfos.push_back( scene::geometry::ObjectCreateInfo {
                     vk::TransformMatrixKHR{
                             std::array<std::array<float, 4>, 3>{{
@@ -165,13 +173,13 @@ export namespace app {
                                                                         {0.0f, 0.0f, 5.0f, 0.0f}
                                                                 }}},
                     2,  // Index into objPaths (i.e., pig_head.obj)
-                    2   // Index into textures
+                    3   // Index into textures
             });
 
 
 
 
-            auto geoReturnInfo = app::setup::GeometryBuilder::createTLASFromOBJsAndTransforms(*device_, commandPool, objPaths, objectCreateInfos);
+            auto geoReturnInfo = app::setup::GeometryBuilder::createTLASFromOBJsAndTransforms(*device_, commandPool, objPaths, objectCreateInfos, lights);
             std::vector<glm::vec3>                     vertexPositions = geoReturnInfo.vertexPositions;
             std::vector<scene::geometry::Vertex>       vertices = geoReturnInfo.vertices;
             std::vector<uint32_t>                      indices = geoReturnInfo.indices;

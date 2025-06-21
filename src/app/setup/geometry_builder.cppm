@@ -12,6 +12,7 @@ import core.log;
 import core.file;
 import scene.geometry.vertex;
 import scene.geometry.object;
+import scene.area_light;
 import vulkan.raytracing.blas;
 import vulkan.raytracing.tlas;
 import vulkan.memory.buffer;
@@ -37,6 +38,9 @@ export namespace app::setup  {
             uint32_t       vertexCount;
             uint32_t       indexCount;
             uint32_t       vertexStride = sizeof(glm::vec3); // or your actual vertex layout
+
+            float intensity = 0.0;
+            glm::vec3 emmisiveColor = glm::vec3(0.0);
         };
 
         struct GeometryReturnInfo {
@@ -51,7 +55,8 @@ export namespace app::setup  {
 
         static GeometryReturnInfo createTLASFromOBJsAndTransforms(const vulkan::context::Device& device, vulkan::context::CommandPool& commandPool,
                                                     const std::vector<std::string>& objStrings,
-                                                    const std::vector<scene::geometry::ObjectCreateInfo>& objectCreateInfos);
+                                                    const std::vector<scene::geometry::ObjectCreateInfo>& objectCreateInfos,
+                                                    std::vector<scene::AreaLight> lights);
 
     private:
     };
@@ -59,7 +64,8 @@ export namespace app::setup  {
     GeometryBuilder::GeometryReturnInfo GeometryBuilder::createTLASFromOBJsAndTransforms(
             const vulkan::context::Device& device, vulkan::context::CommandPool& commandPool,
             const std::vector<std::string>& objStrings,
-            const std::vector<scene::geometry::ObjectCreateInfo>& objectCreateInfos){
+            const std::vector<scene::geometry::ObjectCreateInfo>& objectCreateInfos,
+            std::vector<scene::AreaLight> lights){
 
         std::vector<glm::vec3> vertexPositions{};
         std::vector<uint32_t> indices{};
@@ -68,6 +74,39 @@ export namespace app::setup  {
 
         vk::DeviceSize currVertexOffset = 0;
         vk::DeviceSize currIndexOffset  = 0;
+
+        for (const auto& light : lights) { // TODO add support for multiple area light shapes
+            size_t prevVertexCount = vertexPositions.size();
+            size_t prevIndexCount  = indices.size();
+
+            for (const glm::vec3& point : light.points) {
+                vertexPositions.push_back(point);
+                vertices.push_back(scene::geometry::Vertex{point});
+            }
+            std::vector<uint32_t> temp = {0, 1, 2, 0, 2, 3};
+            for (const uint32_t& index : temp) {
+                indices.push_back(static_cast<uint32_t>(index));
+            }
+
+            size_t newVertexCount = vertexPositions.size() - prevVertexCount;
+            size_t newIndexCount  = indices.size() - prevIndexCount;
+
+            BLASMeshData meshData;
+            meshData.vertexOffset  = currVertexOffset;
+            meshData.indexOffset   = currIndexOffset;
+            meshData.vertexCount   = static_cast<uint32_t>(newVertexCount);
+            meshData.indexCount    = static_cast<uint32_t>(newIndexCount);
+            meshData.vertexSize    = newVertexCount * sizeof(glm::vec3);
+            meshData.indexSize     = newIndexCount * sizeof(uint32_t);
+            meshData.intensity     = light.intensity;
+            meshData.emmisiveColor = light.color;
+
+            currVertexOffset += newVertexCount * sizeof(glm::vec3);
+            currIndexOffset  += newIndexCount * sizeof(uint32_t);
+
+            meshDatas.push_back(meshData);
+        }
+
 
         // Loads the obj info
         for (const auto& objPath : objStrings) {
@@ -93,13 +132,13 @@ export namespace app::setup  {
             meshDatas.push_back(meshData);
         }
 
-
         // creates the index and vertex buffers
         vk::DeviceSize vertexBufferSize = vertexPositions.size() * sizeof(glm::vec3);
         vk::DeviceSize indexBufferSize  = indices.size() * sizeof(uint32_t);
 
         std::vector<vulkan::memory::Buffer::FillRegion> vertexBufferFillRegions {};
         std::vector<vulkan::memory::Buffer::FillRegion>  indexBufferFillRegions {};
+
 
         for (const auto& mesh : meshDatas) { // TODO maybe I can do this in above loop
             vulkan::memory::Buffer::FillRegion vertexFill{};
@@ -151,7 +190,9 @@ export namespace app::setup  {
                     mesh.indexCount,
                     vk::IndexType::eUint32,
                     mesh.vertexOffset / sizeof(glm::vec3),
-                    mesh.indexOffset / sizeof(uint32_t)
+                    mesh.indexOffset / sizeof(uint32_t),
+                    mesh.intensity,
+                    mesh.emmisiveColor
             );
 
             blass.push_back(newBLAS.get());      // collect raw pointer
@@ -159,7 +200,7 @@ export namespace app::setup  {
         }
 
         // create acceleration structures
-        auto tlas = std::make_unique<vulkan::raytracing::TLAS>(device, commandPool, blass, objectCreateInfos);
+        auto tlas = std::make_unique<vulkan::raytracing::TLAS>(device, commandPool, blass, objectCreateInfos, lights);
 
         return GeometryReturnInfo {
                 std::move(tlas),

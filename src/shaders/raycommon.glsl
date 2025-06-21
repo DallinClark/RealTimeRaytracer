@@ -12,6 +12,7 @@ struct GPUCameraData {
     vec3 topLeftViewportCorner; float _pad1;
     vec3 horizontalViewportDelta; float _pad2;
     vec3 verticalViewportDelta; float _pad3;
+    uint numLights;             uint _pad4[3];
 };
 
 struct CombinedPayload {
@@ -20,18 +21,26 @@ struct CombinedPayload {
     int depth;
 };
 
-float random(int seed) {
+float random(uint seed) {
     uint state = uint(seed) * 747796405u + 2891336453u;
     uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
     uint hash = (word >> 22u) ^ word;
     return float(hash) / 4294967296.0;
 }
 
-struct BLASInstanceInfo {
-    uint vertexIndexOffset;
-    uint indexIndexOffset;
-    uint textureIndex;
-    uint _padding; // std430 requires 16-byte alignment
+struct ObjectInfo {
+    uint vertexIndexOffset;   // 4
+    uint indexIndexOffset;    // 4
+    uint textureIndex;        // 4
+    uint _padding0;           // 4 -> align next to 16
+
+    float intensity;          // 4
+    float _padding1;          // 4
+    float _padding2;          // 4
+    float _padding3;          // 4 -> align next vec3
+
+    vec3 emmisiveColor;       // 12
+    float _padding4;          // 4 -> pad to make struct size 48 bytes (aligned to 16)
 };
 
 struct RayPayload {
