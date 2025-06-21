@@ -1,6 +1,7 @@
 module;
 
 #include <vulkan/vulkan.hpp>
+#include <glm/glm.hpp>
 
 export module vulkan.raytracing.blas;
 
@@ -22,7 +23,9 @@ namespace vulkan::raytracing {
                 uint32_t indexCount,
                 vk::IndexType indexType,
                 uint32_t vertexIndexOffset,
-                uint32_t indexIndexOffset
+                uint32_t indexIndexOffset,
+                float intensity,
+                glm::vec3 emmisiveColor
         );
 
         const vk::AccelerationStructureKHR& get() const { return accelerationStructure_.get(); }
@@ -30,6 +33,9 @@ namespace vulkan::raytracing {
 
         const uint32_t getVertexIndexOffset() const { return vertexIndexOffset_; }
         const uint32_t getIndexIndexOffset() const  { return indexIndexOffset_; }
+
+        const float getIntensity() const { return intensity_; }
+        const glm::vec3 getEmmisiveColor() const { return emmisiveColor_; }
 
     private:
         vk::Device device_;
@@ -42,12 +48,16 @@ namespace vulkan::raytracing {
         uint32_t indexIndexOffset_;  // number of indices before this blas
 
         vk::UniqueAccelerationStructureKHR accelerationStructure_;
+
+        float     intensity_;
+        glm::vec3 emmisiveColor_;
     };
 
     // TODO USE THE MEMORY ADDRESS STUFF IN BUFFER CLASS
     BLAS::BLAS(const context::Device& device, context::CommandPool& commandPool, const vk::DeviceAddress& vertexAddress, const vk::DeviceAddress& indexAddress, uint32_t vertexCount,
-                vk::DeviceSize vertexStride, uint32_t indexCount, vk::IndexType indexType, uint32_t vertexIndexOffset, uint32_t indexIndexOffset)
-                    : device_(device.get()),physicalDevice_(device.physical()), vertexIndexOffset_(vertexIndexOffset), indexIndexOffset_(indexIndexOffset) {
+                vk::DeviceSize vertexStride, uint32_t indexCount, vk::IndexType indexType, uint32_t vertexIndexOffset, uint32_t indexIndexOffset, float intensity, glm::vec3 emmisiveColor)
+                    : device_(device.get()),physicalDevice_(device.physical()), vertexIndexOffset_(vertexIndexOffset),
+                      indexIndexOffset_(indexIndexOffset), intensity_(intensity), emmisiveColor_(emmisiveColor) {
 
         vk::DeviceOrHostAddressConstKHR vertexAddr{};
         vertexAddr.deviceAddress = vertexAddress;

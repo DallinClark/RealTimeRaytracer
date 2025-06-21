@@ -10,6 +10,7 @@ import vulkan.memory.buffer;
 import vulkan.context.command_pool;
 import vulkan.raytracing.blas;
 import scene.geometry.object;
+import scene.area_light;
 
 
 namespace vulkan::raytracing {
@@ -17,13 +18,22 @@ namespace vulkan::raytracing {
     export class TLAS {
     public:
         TLAS(const context::Device& device, context::CommandPool& commandPool,
-             const std::vector<const BLAS*>& blass, const std::vector<scene::geometry::ObjectCreateInfo>& objectCreateInfos);
+             const std::vector<const BLAS*>& blass, const std::vector<scene::geometry::ObjectCreateInfo>& objectCreateInfos,
+             std::vector<scene::AreaLight> lights);
 
-        struct BLASInstanceInfo {
-            uint32_t vertexIndexOffset;
-            uint32_t indexIndexOffset;
-            uint32_t textureIndex;
-            uint32_t _padding = 0;
+        struct alignas(16) BLASInstanceInfo {
+            uint32_t vertexIndexOffset;   // 0
+            uint32_t indexIndexOffset;    // 4
+            uint32_t textureIndex;        // 8
+            uint32_t _padding0 = 0;       // 12
+
+            float intensity = 0.0;             // 16
+            float _padding1;             // 20
+            float _padding2;             // 24
+            float _padding3;             // 28
+
+            glm::vec3 emmisiveColor = glm::vec3(0.0);     // 32
+            float _padding4;             // 44
         };
 
 
@@ -39,6 +49,7 @@ namespace vulkan::raytracing {
         std::optional<vulkan::memory::Buffer> buffer_;
         vk::DeviceAddress                     deviceAddress_;
         vk::UniqueAccelerationStructureKHR    accelerationStructure_;
+        std::vector<scene::AreaLight> lights_;
 
         // a vector of BLASInstanceInfos passed into the shader to give each blas information
         // TODO include texture index
@@ -46,19 +57,20 @@ namespace vulkan::raytracing {
     };
 
     TLAS::TLAS(const context::Device& device, context::CommandPool& commandPool,
-               const std::vector<const BLAS*>& blass, const std::vector<scene::geometry::ObjectCreateInfo>& objectCreateInfos) :
-            device_(device.get()), physicalDevice_(device.physical()) {
+               const std::vector<const BLAS*>& blass, const std::vector<scene::geometry::ObjectCreateInfo>& objectCreateInfos, std::vector<scene::AreaLight> lights) :
+            device_(device.get()), physicalDevice_(device.physical()), lights_(lights) {
 
         std::vector<vk::AccelerationStructureInstanceKHR> accelInstances; // MAYBE ADD A .reserve
 
+        uint32_t numLights = lights.size();
 
-        for (int i = 0; i < objectCreateInfos.size(); ++i) {
-            auto currCreateInfo = objectCreateInfos[i];
+        for (int i = 0; i < numLights; ++i) {
+            auto currLight = lights[i];
 
-            uint32_t blasIndex = currCreateInfo.objectIndex;
-            vk::TransformMatrixKHR transform = currCreateInfo.transform;
+            uint32_t blasIndex = i;
+            vk::TransformMatrixKHR transform = currLight.transform;
 
-            const BLAS* blas = blass[blasIndex];
+            const BLAS* blas = blass[i];
 
             vk::AccelerationStructureInstanceKHR instance;
             instance.setTransform(transform);
@@ -71,8 +83,35 @@ namespace vulkan::raytracing {
 
             accelInstances.push_back(instance);
 
-            BLASInstanceInfo BLASInstanceInfo{blas->getVertexIndexOffset(), blas->getIndexIndexOffset(), currCreateInfo.textureIndex};
-            BLASInstanceInfos_.push_back(BLASInstanceInfo);
+            BLASInstanceInfo currInstanceInfo{blas->getVertexIndexOffset(), blas->getIndexIndexOffset(), 0};
+
+            currInstanceInfo.intensity = blas->getIntensity();
+            currInstanceInfo.emmisiveColor = blas->getEmmisiveColor();
+
+            BLASInstanceInfos_.push_back(currInstanceInfo);
+        }
+
+        for (int i = 0; i < objectCreateInfos.size(); ++i) {
+            auto currCreateInfo = objectCreateInfos[i];
+
+            uint32_t blasIndex = currCreateInfo.objectIndex + numLights;
+            vk::TransformMatrixKHR transform = currCreateInfo.transform;
+
+            const BLAS* blas = blass[blasIndex];
+
+            vk::AccelerationStructureInstanceKHR instance;
+            instance.setTransform(transform);
+            instance.setAccelerationStructureReference(blas->getAddress());
+            instance.setMask(0xFF);
+            //instance.setInstanceShaderBindingTableRecordOffset(0); // Look into this later
+
+            instance.setInstanceCustomIndex(i + numLights); // useful in shaders
+            instance.setFlags(vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable);  // MAYBE ENABLE IN FUTURE
+
+            accelInstances.push_back(instance);
+
+            BLASInstanceInfo currInstanceInfo{blas->getVertexIndexOffset(), blas->getIndexIndexOffset(), currCreateInfo.textureIndex};
+            BLASInstanceInfos_.push_back(currInstanceInfo);
         }
 
         uint32_t instanceCount = accelInstances.size();

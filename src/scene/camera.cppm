@@ -18,12 +18,12 @@ namespace scene {
 
     export class Camera {
     public:
-        struct GPUCameraData {  // TODO research buffers and structs, and padding, maybe I should be using a push constant, amd maybe make the calcs in the gpu
-            // TODO optimize the crap out of this, maybe fill a buffer 3x, then read from different parts and update other parts at the same time!!
-            glm::vec3 position;                float _pad0 = 0.0f;
-            glm::vec3 topLeftViewportCorner;  float _pad1 = 0.0f;
-            glm::vec3 horizontalViewportDelta; float _pad2 = 0.0f;
-            glm::vec3 verticalViewportDelta;  float _pad3 = 0.0f;
+        struct alignas(16) GPUCameraData {
+            glm::vec3 position;                float _pad0 = 0.0f; // 16 bytes
+            glm::vec3 topLeftViewportCorner;  float _pad1 = 0.0f; // 16 bytes
+            glm::vec3 horizontalViewportDelta; float _pad2 = 0.0f; // 16 bytes
+            glm::vec3 verticalViewportDelta;  float _pad3 = 0.0f; // 16 bytes
+            uint32_t numAreaLights = 2;           uint32_t _pad4[3] = {}; // Pad to next 16-byte boundary
         };
 
         Camera(const vulkan::context::Device& device, float fovY, glm::vec3 position, glm::vec3 lookAt,
@@ -128,7 +128,6 @@ namespace scene {
             GPUData_.verticalViewportDelta = -(2.0f * halfHeight * v) / float(pixelHeight_);
             GPUData_.topLeftViewportCorner = position_ - (halfWidth * u) + (halfHeight * v) - w;
 
-            static_assert(sizeof(GPUCameraData) == 64);
             buffer_.fill(&GPUData_, sizeof(GPUCameraData), 0);
             GPUDataNeedsUpdate_ = false;
         }

@@ -167,6 +167,8 @@ add_executable(${PROJECT_NAME}
         src/vulkan/memory/image_sampler.cppm
         src/scene/geometry/object.cppm
         src/scene/textures/texture.cppm
+        external/LUT/ltc_matrix.h
+        src/scene/area_light.cppm
 )
 
 # --- MODULE SUPPORT -----------------------------------------

@@ -10,8 +10,8 @@ namespace scene::geometry {
 
     export struct Vertex {
         glm::vec3 position; float pad0 = 0.0f;
-        glm::vec3 normal;   float pad1 = 0.0f;
-        glm::vec2 uv;       glm::vec2 pad2 = glm::vec2(0.0f, 0.0f);
+        glm::vec3 normal = glm::vec3(0.0);   float pad1 = 0.0f;
+        glm::vec2 uv = glm::vec2(0.0);       glm::vec2 pad2 = glm::vec2(0.0f, 0.0f);
 
         // Equality operator
         bool operator==(const Vertex& other) const {

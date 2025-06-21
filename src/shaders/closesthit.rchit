@@ -6,10 +6,13 @@
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 #extension GL_EXT_buffer_reference2 : require
 #include "raycommon.glsl"
+#include "cook-torrance.glsl"
+#include "LTC.glsl"
+
+hitAttributeEXT vec2 attribs;
 
 layout(location = 0) rayPayloadInEXT RayPayload payloadIn;
 layout(location = 1) rayPayloadEXT bool isShadowed;
-hitAttributeEXT vec2 attribs;
 
 layout(set = 0, binding = 1) uniform accelerationStructureEXT topLevelAS;
 layout(set = 0, binding = 2) uniform CameraUBO {
@@ -22,60 +25,109 @@ layout(set = 0, binding = 4) readonly buffer IndexBuffer {
     uint indices[];
 };
 layout(set = 0, binding = 5) uniform sampler2D texSamplers[];
-layout(set = 0, binding = 6) readonly buffer BLASInfoBuffer {
-    BLASInstanceInfo blasInfos[];
-};
-layout(set = 0, binding = 7) readonly buffer VertexPositionBuffer {
-    vec3 vertexPositions[];
+layout(set = 0, binding = 6) readonly buffer ObjectInfoBuffer {
+    ObjectInfo objectInfos[];
 };
 
+const float LUT_SIZE  = 64.0; // ltc_texture size
+const float LUT_SCALE = (LUT_SIZE - 1.0)/LUT_SIZE;
+const float LUT_BIAS  = 0.5/LUT_SIZE;
 
-const float PI = 3.14159265359;
-
-float chiGGX(float v)
+// Vector form without project to the plane (dot with the normal)
+// Use for proxy sphere clipping
+vec3 IntegrateEdgeVec(vec3 v1, vec3 v2)
 {
-    return v > 0 ? 1 : 0;
-}
-// n = surface normal
-// h = the half vector between view and light,
-// v = view direction (towards camera)
+  // Using built-in acos() function will result flaws
+  // Using fitting result for calculating acos()
+  float x = dot(v1, v2);
+  float y = abs(x);
 
-float GGX_Distribution(vec3 n, vec3 h, float alpha)  // output how much a particular microfacet orientation contributes
-{
-    float NoH = dot(n,h);
-    float alpha2 = alpha * alpha;
-    float NoH2 = NoH * NoH;
-    float den = max(NoH2 * alpha2 + (1.0 - NoH2), 0.001);
-    return (chiGGX(NoH) * alpha2) / ( PI * den * den );
-}
+  float a = 0.8543985 + (0.4965155 + 0.0145206*y)*y;
+  float b = 3.4175940 + (4.1616724 + y)*y;
+  float v = a / b;
 
-float GGX_PartialGeometryTerm(vec3 v, vec3 n, vec3 h, float alpha) // output how much the light is reduced by microfacet shadows, bounces, etc.
-{
-    float VoH2 = clamp(dot(v, h), 0.001, 1.0);
-    float chi = chiGGX( VoH2 / clamp(dot(v, n), 0.001, 1.0) );
-    VoH2 = VoH2 * VoH2;
-    float tan2 = ( 1 - VoH2 ) / VoH2;
-    return (chi * 2) / ( 1 + sqrt( 1 + alpha * alpha * tan2 ) );
+  float theta_sintheta = (x > 0.0) ? v : 0.5*inversesqrt(max(1.0 - x*x, 1e-7)) - v;
+
+  return cross(v1, v2)*theta_sintheta;
 }
 
-// cosT = the angle between the viewing direction and the half vector
-// F0 = the materials response at normal incidence calculated as follows
-// float3 F0 = abs ((1.0 - ior) / (1.0 + ior));
-// F0 = F0 * F0;
-// F0 = lerp(F0, materialColour.rgb, metallic);
-
-vec3 Fresnel_Schlick(float cosT, vec3 F0) // output the way the light interacts with the surface at different angles
+float IntegrateEdge(vec3 v1, vec3 v2)
 {
-  return F0 + (1.0 - F0) * pow( 1 - cosT, 5.0);
+  return IntegrateEdgeVec(v1, v2).z;
 }
 
+// P is fragPos in world space (LTC distribution)
+vec3 LTC_Evaluate(vec3 N, vec3 V, vec3 P, mat3 Minv, vec3 points[4], bool twoSided)
+{
+  // construct orthonormal basis around N
+  vec3 T1, T2;
+  T1 = normalize(V - N * dot(V, N));
+  T2 = cross(N, T1);
+
+  // rotate area light in (T1, T2, N) basis
+  Minv = Minv * transpose(mat3(T1, T2, N));
+
+  // polygon (allocate 4 vertices for clipping)
+  vec3 L[4];
+  // transform polygon from LTC back to origin Do (cosine weighted)
+  L[0] = Minv * (points[0] - P);
+  L[1] = Minv * (points[1] - P);
+  L[2] = Minv * (points[2] - P);
+  L[3] = Minv * (points[3] - P);
+
+  // use tabulated horizon-clipped sphere
+  // check if the shading point is behind the light
+  vec3 dir = points[0] - P; // LTC space
+  vec3 lightNormal = cross(points[1] - points[0], points[3] - points[0]);
+  bool behind = (dot(dir, lightNormal) < 0.0);
+
+  // cos weighted space
+  L[0] = normalize(L[0]);
+  L[1] = normalize(L[1]);
+  L[2] = normalize(L[2]);
+  L[3] = normalize(L[3]);
+
+  // integrate
+  vec3 vsum = vec3(0.0);
+  vsum += IntegrateEdgeVec(L[0], L[1]);
+  vsum += IntegrateEdgeVec(L[1], L[2]);
+  vsum += IntegrateEdgeVec(L[2], L[3]);
+  vsum += IntegrateEdgeVec(L[3], L[0]);
+
+  // form factor of the polygon in direction vsum
+  float len = length(vsum);
+
+  float z = vsum.z/len;
+  if (behind)
+      z = -z;
+
+  vec2 uv = vec2(z*0.5f + 0.5f, len); // range [0, 1]
+  uv = uv*LUT_SCALE + LUT_BIAS;
+
+  // Fetch the form factor for horizon clipping
+  float scale = texture(texSamplers[1], uv).w;
+
+  float sum = len*scale;
+  if (!behind && !twoSided)
+      sum = 0.0;
+
+  // Outgoing radiance (solid angle) for the entire polygon
+  vec3 Lo_i = vec3(sum, sum, sum);
+  return Lo_i;
+}
 
 void main() {
 
+    ObjectInfo objectInfo = objectInfos[gl_InstanceCustomIndexEXT];
 
-    BLASInstanceInfo blasInfo = blasInfos[gl_InstanceCustomIndexEXT];
-    uint vertexOffset = blasInfo.vertexIndexOffset;
-    uint indexOffset = blasInfo.indexIndexOffset;
+
+    if (objectInfo.intensity > 0) {
+        payloadIn.primaryColor = objectInfo.emmisiveColor;
+        return;
+    }
+
+    uint vertexOffset = objectInfo.vertexIndexOffset;
+    uint indexOffset = objectInfo.indexIndexOffset;
 
     uint index0 = indices[3 * gl_PrimitiveID + 0 + indexOffset];
     uint index1 = indices[3 * gl_PrimitiveID + 1 + indexOffset];
@@ -89,7 +141,6 @@ void main() {
     vec3 v1position = v1.position;
     vec3 v2position = v2.position;
 
-
     vec3 bary = vec3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
     vec3 localPos = v0position * bary.x + v1position * bary.y + v2position * bary.z;
     vec3 hitPoint = vec3(gl_ObjectToWorldEXT * vec4(localPos, 1.0));
@@ -98,95 +149,162 @@ void main() {
     vec3 hitNormal = normalize(normalMatrix * interpolatedLocalNormal);
     vec2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
 
-    vec3 surfaceColor = texture(nonuniformEXT(texSamplers[blasInfo.textureIndex * 2]), uv).rgb;
-    vec3 surfaceMaterial = texture(nonuniformEXT(texSamplers[blasInfo.textureIndex * 2 + 1]), uv).rgb;
+    vec3 surfaceColor = texture(nonuniformEXT(texSamplers[objectInfo.textureIndex * 2]), uv).rgb;
+    vec3 surfaceMaterial = texture(nonuniformEXT(texSamplers[objectInfo.textureIndex * 2 + 1]), uv).rgb;
 
-
-    vec3 lightColor = vec3(1.0, 0.95, 0.9);
-    float lightIntensity = 5.0;
-    vec3 lightDir = normalize(vec3(5, 4, 3));
     vec3 viewDir = normalize(cam.position - hitPoint);
-    vec3 halfVector = normalize(lightDir + viewDir);
-
-    // Start shadow ray slightly offset to avoid self-intersection
-    vec3 shadowRayDir = lightDir; //
-    vec3 shadowRayOrigin = hitPoint + (hitNormal * 0.01);
-
-    // Initialize shadow payload
-    isShadowed = true;
-
-    uint flags = gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT | gl_RayFlagsSkipClosestHitShaderEXT;
-
-    // Trace shadow ray towards the light
-    traceRayEXT(
-        topLevelAS,
-        flags, // terminate on first hit
-        0xFF,
-        0,    // sbt record offset
-        0,    // sbt record stride
-        1,    // miss index
-        shadowRayOrigin,
-        0.001,   // min t
-        shadowRayDir,
-        1000.0,  // max t (light distance, or large for directional light)
-        1        // location of the shadow ray payload (location=1)
-    );
-
-    float shadowFactor = isShadowed ? 0.0 : 1.0;
-
-    if (payloadIn.depth < 2) {
-
-            payloadIn.depth += 1;
-            vec3 reflectedDir = reflect(-viewDir, hitNormal);
-            vec3 reflectedOrigin = hitPoint + hitNormal * 0.01;
-
-            traceRayEXT(
-                topLevelAS,
-                gl_RayFlagsOpaqueEXT,
-                0xFF,
-                0, 0, 0,
-                reflectedOrigin,
-                0.001,
-                reflectedDir,
-                1000.0,
-                0 // payload location
-            );
-
-    }
-
-    float roughness = surfaceMaterial.r;
-    roughness = clamp(roughness, 0.01, 1.0);
-    float metallic = surfaceMaterial.b;
-    float occlusion = surfaceMaterial.g; // NEED TO IMPLEMENT
-    vec3 ior = vec3(1.5); // NEED TO CHANGE TO JUST A VALUE
-
-    vec3 F0 = abs((1.0 - ior) / (1.0 + ior));
-    F0 = F0 * F0;
-    F0 = mix(vec3(0.04), surfaceColor, metallic);
-    float cosTheta = clamp(dot(viewDir, halfVector), 0.0, 1.0);
-
-    float D = GGX_Distribution(hitNormal, halfVector, roughness);
-    float G = GGX_PartialGeometryTerm(viewDir, hitNormal, halfVector, roughness) * GGX_PartialGeometryTerm(lightDir, hitNormal, halfVector, roughness);
-    vec3 F = Fresnel_Schlick(cosTheta, F0);
-
-    float NdotV = max(dot(hitNormal, viewDir), 0.0001);
-    float NdotL = max(dot(hitNormal, lightDir), 0.0001);
-
-    vec3 specular = (D * F * G)  * 1.0 / (4.0 * NdotV * NdotL);
-    specular = specular * payloadIn.reflectionColor * shadowFactor;
-
-    vec3 kD = vec3(1.0) - F;           // Energy conservation
-    kD *= 1.0 - metallic;              // Lambert Diffuse
-
-    vec3 diffuse = (surfaceColor / PI) * kD * clamp(shadowFactor, 0.1, 1.0);
+   //vec3 halfVector = normalize(lightDir + viewDir);
 
 
-    vec3 radiance = lightColor * lightIntensity * NdotL;  // incoming light
+   if (payloadIn.depth < 4) {
+       payloadIn.depth += 1;
+       vec3 reflectedDir = reflect(-viewDir, hitNormal);
+       vec3 reflectedOrigin = hitPoint + hitNormal * 0.01;
 
-    vec3 color = (specular + diffuse) * radiance;
+       traceRayEXT(
+           topLevelAS,
+           gl_RayFlagsOpaqueEXT,
+           0xFF,
+           0, 0, 0,
+           reflectedOrigin,
+           0.001,
+           reflectedDir,
+           1000.0,
+           0 // payload location
+       );
+   }
 
-    vec3 ambient = vec3(0.1) * surfaceColor ;  // or indirect lighting / GI
-    color += ambient ;//* occlusion;
+   float roughness = surfaceMaterial.r;
+   roughness = clamp(roughness, 0.01, 1.0);
+   float metallic = surfaceMaterial.b;
 
-    payloadIn.primaryColor = specular;//color;
+   //roughness = 0.0;
+    vec3 F0 = mix(vec3(0.04), surfaceColor, metallic);
+    vec3 mDiffuse = (1.0 - metallic) * surfaceColor;
+    vec3 mSpecular = F0;
+
+   vec3 N = hitNormal;
+   vec3 V = viewDir;
+   vec3 P = hitPoint;
+   float dotNV = clamp(dot(N, V), 0.0f, 1.0f);
+
+
+   // use roughness and sqrt(1-cos_theta) to sample M_texture
+   vec2 LUTuv = vec2(roughness, sqrt(1.0f - dotNV));
+   LUTuv = LUTuv*LUT_SCALE + LUT_BIAS;
+
+
+   // get 4 parameters for inverse_M
+   vec4 t1 = texture(nonuniformEXT(texSamplers[0]), LUTuv);
+
+   // Get 2 parameters for Fresnel calculation
+   vec4 t2 = texture(nonuniformEXT(texSamplers[1]), LUTuv);
+
+   mat3 Minv = mat3(
+       vec3(t1.x, 0, t1.y),
+       vec3(  0,  1,    0),
+       vec3(t1.z, 0, t1.w)
+   );
+
+   vec3 result = vec3(0.0);
+
+   for (uint i = 0; i < cam.numLights; ++i) {
+
+       ObjectInfo lightInfo = objectInfos[i];
+
+       uint lightVertexOffset = lightInfo.vertexIndexOffset;
+
+       Vertex lv0 = vertices[lightVertexOffset + 0];
+       Vertex lv1 = vertices[lightVertexOffset + 1];
+       Vertex lv2 = vertices[lightVertexOffset + 2];
+       Vertex lv3 = vertices[lightVertexOffset + 3];
+
+
+
+       // Optional: if you want lights to be translated in space
+       vec3 areaLightTranslate = vec3(0.0); // define if needed
+
+       vec3 translatedPoints[4];
+       translatedPoints[0] = lv0.position + areaLightTranslate;
+       translatedPoints[1] = lv1.position + areaLightTranslate;
+       translatedPoints[2] = lv2.position + areaLightTranslate;
+       translatedPoints[3] = lv3.position + areaLightTranslate;
+
+       const uint numShadowSamples = 18;
+       float shadowFactor = 0.0;
+       vec3 lightSamplePos = vec3(0.0);
+
+
+       for (uint s = 0; s < numShadowSamples; ++s) {
+           // Compute shadow ray direction towards some point on the area light
+           // For now, just pick a simple center or random point on the light
+           uvec2 pixel = gl_LaunchIDEXT.xy;
+           uint seed = s + pixel.x * 733 + pixel.y * 1933;
+
+            float r1 = random(seed);
+            float r2 = random(seed + 100);
+
+            bool useSecondTriangle = (random(s + 64) > 0.5);
+
+           if (!useSecondTriangle) {
+               // Triangle 1: translatedPoints[0], translatedPoints[1], translatedPoints[2]
+               if (r1 + r2 > 1.0) {
+                   r1 = 1.0 - r1;
+                   r2 = 1.0 - r2;
+               }
+               lightSamplePos = translatedPoints[0] + r1 * (translatedPoints[1] - translatedPoints[0]) + r2 * (translatedPoints[2] - translatedPoints[0]);
+           } else {
+                   // Triangle 2: translatedPoints[0], translatedPoints[2], translatedPoints[3]
+                   if (r1 + r2 > 1.0) {
+                       r1 = 1.0 - r1;
+                       r2 = 1.0 - r2;
+                   }
+                   lightSamplePos = translatedPoints[0] + r1 * (translatedPoints[2] - translatedPoints[0]) + r2 * (translatedPoints[3] - translatedPoints[0]);
+               }
+
+
+           vec3 shadowRayDir = normalize(lightSamplePos - hitPoint);
+           float lightDistance = length(lightSamplePos - hitPoint);
+
+           vec3 shadowRayOrigin = hitPoint + hitNormal * 0.01;
+
+           // Reset shadow payload before trace
+           isShadowed = true;
+
+           uint shadowFlags = gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT | gl_RayFlagsSkipClosestHitShaderEXT;
+
+           traceRayEXT(
+               topLevelAS,
+               shadowFlags,
+               0xFF,
+               0, 0, 0,
+               shadowRayOrigin,
+               0.001,
+               shadowRayDir,
+               lightDistance - 0.01,
+               1 // location of shadow ray payload
+           );
+
+           // if any hit, isShadowed will be true, so shadowFactor only adds when not shadowed
+           shadowFactor += isShadowed ? 0.0 : 1.0;
+       }
+
+       shadowFactor /= float(numShadowSamples);
+
+       bool twoSided = true;
+
+       vec3 diffuse = LTC_Evaluate(N, V, P, mat3(1), translatedPoints, twoSided);
+       vec3 specular = LTC_Evaluate(N, V, P, Minv, translatedPoints, twoSided);
+
+
+       vec3 fresnel = mSpecular * t2.x + (vec3(1.0) - mSpecular) * t2.y;
+       specular *= fresnel;
+       specular *= mix(vec3(1.0), payloadIn.reflectionColor, metallic);
+
+       result += lightInfo.emmisiveColor * lightInfo.intensity * shadowFactor * (specular + mDiffuse * diffuse);
+   }
+
+   payloadIn.reflectionColor = result;
+   payloadIn.primaryColor = result;
+
 }

@@ -131,7 +131,7 @@ namespace vulkan {
         pipelineInfo.groupCount = static_cast<uint32_t>(shaderGroups_.size());
         pipelineInfo.pGroups = shaderGroups_.data();
         pipelineInfo.layout = pipelineLayout_.get();
-        pipelineInfo.maxPipelineRayRecursionDepth = 2;
+        pipelineInfo.maxPipelineRayRecursionDepth = 4;
 
         pipeline_ = device_.get().createRayTracingPipelineKHRUnique({}, {}, pipelineInfo).value;
     }

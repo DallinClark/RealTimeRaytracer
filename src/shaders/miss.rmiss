@@ -9,6 +9,9 @@ layout(set = 0, binding = 8) uniform sampler2D hdri;
 layout(location = 0) rayPayloadInEXT RayPayload payload;
 
 void main() {
+    payload.primaryColor = vec3(0.0);
+    payload.reflectionColor = vec3(0.0);
+    return;
     // Convert ray direction into a UV for environment map sampling
     vec3 dir = normalize(gl_WorldRayDirectionEXT);
     float u = atan(dir.z, dir.x) / (2.0 * 3.14159265) + 0.5;
