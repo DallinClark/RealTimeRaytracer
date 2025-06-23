@@ -1,12 +1,15 @@
 module;
 
-#include <vulkan/vulkan.hpp>
-
-export module vulkan.memory.descriptor_pool;
+#include <vector>
 
 import core.log;
 import vulkan.context.device;
 import vulkan.memory.descriptor_set_layout;
+import vulkan.types;
+
+export module vulkan.memory.descriptor_pool;
+
+
 
 namespace vulkan::memory {
 

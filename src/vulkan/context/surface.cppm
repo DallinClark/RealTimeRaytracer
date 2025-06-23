@@ -5,10 +5,12 @@ module;
 #include <GLFW/glfw3.h>
 #include <stdexcept>
 
-export module vulkan.context.surface;
-
 import core.log;
 import vulkan.context.instance;
+
+export module vulkan.context.surface;
+
+
 
 namespace vulkan::context {
 

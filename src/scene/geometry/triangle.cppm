@@ -1,11 +1,11 @@
 module;
 
-#include <glm/glm.hpp>
-#include <vulkan/vulkan.hpp>
+#include <array>
 
 import scene.geometry.vertex;
 import vulkan.memory.buffer;
 import vulkan.context.device;
+import vulkan.types;
 
 export module scene.geometry.triangle;
 

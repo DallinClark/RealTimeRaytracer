@@ -1,17 +1,19 @@
 module;
 
-#include <vulkan/vulkan.hpp>
-
-#include <vector>
-#include <stdexcept>
+#include <algorithm>
+#include <cassert>
 #include <limits>
-
-export module vulkan.context.swapchain;
+#include <vector>
 
 import core.log;
 import vulkan.context.instance;
 import vulkan.context.device;
 import vulkan.context.surface;
+import vulkan.types;
+
+export module vulkan.context.swapchain;
+
+
 
 namespace vulkan::context {
 
@@ -149,7 +151,7 @@ namespace vulkan::context {
             info.preTransform     = caps.currentTransform;
             info.compositeAlpha   = vk::CompositeAlphaFlagBitsKHR::eOpaque;
             info.presentMode      = pm;
-            info.clipped          = VK_TRUE;
+            info.clipped          = vk::True;
             info.oldSwapchain     = nullptr;
 
             swapchain_ = device_.createSwapchainKHRUnique(info);

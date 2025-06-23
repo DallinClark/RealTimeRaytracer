@@ -1,19 +1,14 @@
 module;
 
-#include <vulkan/vulkan.hpp>
-
 #include <vector>
-#include <string_view>
 #include <set>
-#include <optional>
 #include <algorithm>
-#include <stdexcept>
-#include <cstring>
-
-export module vulkan.context.command_pool;
 
 import core.log;
 import vulkan.context.instance;
+import vulkan.types;
+
+export module vulkan.context.command_pool;
 
 namespace vulkan::context {
 

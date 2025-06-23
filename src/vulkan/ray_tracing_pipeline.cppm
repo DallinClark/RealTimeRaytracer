@@ -1,17 +1,18 @@
 module;
 #include <vector>
-#include <string>
 #include <fstream>
-#include <vulkan/vulkan.hpp>
 #include <optional>
-
-export module vulkan.ray_tracing_pipeline;
 
 import core.file;
 import core.log;
 import vulkan.context.device;
 import vulkan.context.command_pool;
 import vulkan.memory.buffer;
+import vulkan.types;
+
+export module vulkan.ray_tracing_pipeline;
+
+
 
 namespace vulkan {
 
@@ -106,9 +107,9 @@ namespace vulkan {
                 {{}, vk::ShaderStageFlagBits::eClosestHitKHR, rchit_.get(), "main"}
         };
         shaderGroups_ = {
-                {vk::RayTracingShaderGroupTypeKHR::eGeneral,           0,                    VK_SHADER_UNUSED_KHR, VK_SHADER_UNUSED_KHR, VK_SHADER_UNUSED_KHR},
-                {vk::RayTracingShaderGroupTypeKHR::eGeneral,           1,                    VK_SHADER_UNUSED_KHR, VK_SHADER_UNUSED_KHR, VK_SHADER_UNUSED_KHR},
-                {vk::RayTracingShaderGroupTypeKHR::eTrianglesHitGroup, VK_SHADER_UNUSED_KHR, 2,                    VK_SHADER_UNUSED_KHR, VK_SHADER_UNUSED_KHR}
+                {vk::RayTracingShaderGroupTypeKHR::eGeneral,           0,                   vk::ShaderUnusedKHR, vk::ShaderUnusedKHR, vk::ShaderUnusedKHR},
+                {vk::RayTracingShaderGroupTypeKHR::eGeneral,           1,                   vk::ShaderUnusedKHR, vk::ShaderUnusedKHR, vk::ShaderUnusedKHR},
+                {vk::RayTracingShaderGroupTypeKHR::eTrianglesHitGroup, vk::ShaderUnusedKHR, 2,                   vk::ShaderUnusedKHR, vk::ShaderUnusedKHR}
         };
     }
 

@@ -1,12 +1,15 @@
 module;
 
-#include <vulkan/vulkan.hpp>
-
-export module vulkan.raytracing.blas;
+#include <cstdint>
+#include <optional>
 
 import vulkan.context.device;
 import vulkan.memory.buffer;
 import vulkan.context.command_pool;
+import vulkan.types;
+
+export module vulkan.raytracing.blas;
+
 
 namespace vulkan::raytracing {
 
@@ -17,7 +20,7 @@ namespace vulkan::raytracing {
                 context::CommandPool& commandPool,
                 const vk::DeviceAddress& vertexAddress,
                 const vk::DeviceAddress& indexAddress,
-                uint32_t vertexCount,
+                std::uint32_t vertexCount,
                 vk::DeviceSize vertexStride,
                 uint32_t indexCount,
                 vk::IndexType indexType
@@ -36,7 +39,7 @@ namespace vulkan::raytracing {
         vk::UniqueAccelerationStructureKHR accelerationStructure_;
     };
 
-    // TODO USE THE MEMORY ADRESS STUFF IN BUFFER CLASS
+    // TODO USE THE MEMORY ADDRESS STUFF IN BUFFER CLASS
     BLAS::BLAS(const context::Device& device, context::CommandPool& commandPool, const vk::DeviceAddress& vertexAddress, const vk::DeviceAddress& indexAddress, uint32_t vertexCount,
                 vk::DeviceSize vertexStride, uint32_t indexCount, vk::IndexType indexType)
                     : device_(device.get()),physicalDevice_(device.physical()) {

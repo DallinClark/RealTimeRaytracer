@@ -2,13 +2,10 @@ module;
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include <vulkan/vulkan.hpp>
-#include <iostream>
-
-#include <memory>
 
 import vulkan.memory.buffer;
 import vulkan.context.device;
+import vulkan.types;
 
 export module scene.camera;
 

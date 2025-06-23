@@ -3,7 +3,6 @@ module;
 #include <chrono>
 #include <format>
 #include <print>
-#include <source_location>
 #include <string_view>
 
 export module core.log;

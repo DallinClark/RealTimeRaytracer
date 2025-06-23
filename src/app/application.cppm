@@ -1,6 +1,5 @@
 module;
 
-#include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <tiny_obj_loader.h>
 
@@ -26,6 +25,7 @@ import vulkan.ray_tracing_pipeline;
 import vulkan.memory.image;
 import vulkan.raytracing.blas;
 import vulkan.raytracing.tlas;
+import vulkan.types;
 import app.window;
 
 import core.file;

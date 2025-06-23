@@ -1,14 +1,17 @@
 module;
 
-#include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
-
-export module vulkan.raytracing.tlas;
+#include <optional>
 
 import vulkan.context.device;
 import vulkan.memory.buffer;
 import vulkan.context.command_pool;
 import vulkan.raytracing.blas;
+import vulkan.types;
+
+export module vulkan.raytracing.tlas;
+
+
 namespace vulkan::raytracing {
 
     export class TLAS {

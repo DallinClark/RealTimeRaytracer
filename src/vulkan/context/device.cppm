@@ -1,20 +1,19 @@
 module;
 
-#include <vulkan/vulkan.hpp>
-
 #include <vector>
-#include <string_view>
 #include <set>
 #include <optional>
 #include <algorithm>
 #include <stdexcept>
-#include <cstring>
-
-export module vulkan.context.device;
 
 import core.log;
 import vulkan.context.instance;
 import vulkan.dispatch;
+import vulkan.types;
+
+export module vulkan.context.device;
+
+
 
 namespace vulkan::context {
 
@@ -57,12 +56,12 @@ private:
     // Required device extensions for swapchain + ray tracing
     static std::vector<const char*> requiredExtensions() noexcept {
         return {
-            VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-            VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
-            VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
-            VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
-            VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
-            VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
+            vk::KHRSwapchainExtensionName,
+            vk::KHRAccelerationStructureExtensionName,
+            vk::KHRRayTracingPipelineExtensionName,
+            vk::KHRDeferredHostOperationsExtensionName,
+            vk::KHRBufferDeviceAddressExtensionName,
+            vk::EXTDescriptorIndexingExtensionName,
         };
     }
 
@@ -174,20 +173,20 @@ inline Device::Device(
 
     // Enable ray tracing & device-address features
     vk::PhysicalDeviceBufferDeviceAddressFeatures bufferFeatures {};
-    bufferFeatures.bufferDeviceAddress = VK_TRUE;
+    bufferFeatures.bufferDeviceAddress = vk::True;
 
     // Allows for descriptor indexing in shaders, might not be needed
     vk::PhysicalDeviceDescriptorIndexingFeatures descriptorIndexingFeatures{};
-    descriptorIndexingFeatures.descriptorBindingPartiallyBound          = VK_TRUE;
-    descriptorIndexingFeatures.runtimeDescriptorArray                   = VK_TRUE;
+    descriptorIndexingFeatures.descriptorBindingPartiallyBound          = vk::True;
+    descriptorIndexingFeatures.runtimeDescriptorArray                   = vk::True;
     descriptorIndexingFeatures.pNext                                    = &bufferFeatures;
 
     vk::PhysicalDeviceAccelerationStructureFeaturesKHR accelFeatures {};
-    accelFeatures.accelerationStructure = VK_TRUE;
+    accelFeatures.accelerationStructure = vk::True;
     accelFeatures.pNext                 = &descriptorIndexingFeatures;
 
     vk::PhysicalDeviceRayTracingPipelineFeaturesKHR rtFeatures {};
-    rtFeatures.rayTracingPipeline = VK_TRUE;
+    rtFeatures.rayTracingPipeline = vk::True;
     rtFeatures.pNext              = &accelFeatures;
 
 

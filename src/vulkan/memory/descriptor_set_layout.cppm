@@ -1,10 +1,12 @@
 module;
 
-#include <vulkan/vulkan.hpp>
+#include <vector>
+
+import core.log;
+import vulkan.types;
 
 export module vulkan.memory.descriptor_set_layout;
 
-import core.log;
 
 namespace vulkan::memory {
 
@@ -18,7 +20,8 @@ export class DescriptorSetLayout {
 public:
     DescriptorSetLayout(vk::Device device) : _device(device) {};
 
-    void addBinding(uint32_t binding,                  // number that this data will be bound to, e.g 1,2,3
+    void addBinding(
+        std::uint32_t binding,                  // number that this data will be bound to, e.g 1,2,3
                     vk::DescriptorType type,           // type of data, e.g. vk::DescriptorType::eUniformBuffer
                     vk::ShaderStageFlags stageFlags,   // where it will be used within the pipe, e.g.
                     uint32_t count = 1                 // size of the data, if it's an array it will be bigger

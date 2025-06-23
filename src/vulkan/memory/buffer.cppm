@@ -1,12 +1,15 @@
 module;
 
-#include <vulkan/vulkan.hpp>
-
-export module vulkan.memory.buffer;
+#include <vector>
 
 import core.log;
 import vulkan.context.device;
 import vulkan.context.command_pool;
+import vulkan.types;
+
+export module vulkan.memory.buffer;
+
+
 
 namespace vulkan::memory {
 
@@ -44,7 +47,7 @@ namespace vulkan::memory {
 
         /// Map (host-visible) memory at [offset, offset+size),
         /// throws if buffer was not created HOST_VISIBLE.
-        [[nodiscard]] void* map(vk::DeviceSize offset = 0, vk::DeviceSize size = VK_WHOLE_SIZE);
+        [[nodiscard]] void* map(vk::DeviceSize offset = 0, vk::DeviceSize size = vk::WholeSize);
 
         /// Unmap memory when done
         void unmap();
@@ -141,7 +144,7 @@ namespace vulkan::memory {
             throw std::runtime_error("Buffer: cannot map non-host-visible memory");
         }
         // If size==VK_WHOLE_SIZE, map entire allocation minus offset
-        const vk::DeviceSize mapSize = size == VK_WHOLE_SIZE
+        const vk::DeviceSize mapSize = size == vk::WholeSize
             ? allocationSize_ - offset
             : size;
 

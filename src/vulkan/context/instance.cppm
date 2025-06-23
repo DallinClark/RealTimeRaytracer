@@ -1,19 +1,21 @@
 module;
 
-#include <vulkan/vulkan.hpp>
 #include <GLFW/glfw3.h>
+#include <vulkan/vk_platform.h>
 
-#include <vector>
-#include <string_view>
-#include <stdexcept>
 #include <algorithm>
-#include <cstring>
 #include <iostream>
-
-export module vulkan.context.instance;
+#include <stdexcept>
+#include <string_view>
+#include <vector>
 
 import core.log;
 import vulkan.dispatch;
+import vulkan.types;
+
+export module vulkan.context.instance;
+
+
 
 namespace vulkan::context {
 
@@ -57,7 +59,7 @@ private:
         const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&count);
         std::vector extensions(glfwExtensions, glfwExtensions + count);
         if (enableValidation) {
-            extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+            extensions.push_back(vk::EXTDebugUtilsExtensionName);
         }
         return extensions;
     }
@@ -109,7 +111,7 @@ private:
             core::log::warn ("[VULKAN] {}", data->pMessage);
         else
             core::log::info ("[VULKAN] {}", data->pMessage);
-        return VK_FALSE;
+        return vk::False;
     }
 };
 
@@ -131,11 +133,12 @@ inline Instance::Instance(std::string_view appName, const bool enableValidation)
 
     // Application info
     const vk::ApplicationInfo appInfo {
-        appName.data(),         // pApplicationName
-        VK_MAKE_VERSION(1,0,0), // applicationVersion
-        "NoEngine",             // pEngineName
-        VK_MAKE_VERSION(1,0,0), // engineVersion
-        VK_API_VERSION_1_2      // apiVersion
+        appName.data(),              // pApplicationName
+        vk::makeApiVersion(0,1,2,0), // applicationVersion
+        "NoEngine",                  // pEngineName
+        vk::makeApiVersion(0,1,2,0), // engineVersion
+        vk::ApiVersion12             // apiVersion
+
     };
 
     // Instance creation
@@ -155,7 +158,7 @@ inline Instance::Instance(std::string_view appName, const bool enableValidation)
 
     // Create the Vulkan instance
     instance_ = vk::createInstanceUnique(createInfo);
-    vulkan::dispatch::init_instance(instance_.get());
+    dispatch::init_instance(instance_.get());
     core::log::info ("Vulkan instance created");
 
     // Set up debug messenger if needed

@@ -1,8 +1,12 @@
 module;
 
-#include <vulkan/vulkan.hpp>
+#include <cstdint>
+#include <stdexcept>
+
+import vulkan.types;
 
 export module vulkan.memory.image;
+
 
 namespace vulkan::memory {
 
@@ -65,7 +69,8 @@ namespace vulkan::memory {
         // Allocate memory
         vk::MemoryRequirements memRequirements = device_.getImageMemoryRequirements(image_.get());
 
-        vk::PhysicalDeviceMemoryProperties memProps = physical.getMemoryProperties();
+        vk::PhysicalDeviceMemoryProperties memProps =
+            physical.getMemoryProperties();
         uint32_t memoryTypeIndex = uint32_t(~0u);
         for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
             if ((memRequirements.memoryTypeBits & (1 << i)) &&
@@ -112,8 +117,8 @@ namespace vulkan::memory {
 
     void Image::setImageLayout(vk::CommandBuffer commandBuffer, vk::Image image, vk::ImageLayout oldLayout, vk::ImageLayout newLayout) {
         vk::ImageMemoryBarrier barrier;
-        barrier.setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
-        barrier.setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
+        barrier.setDstQueueFamilyIndex(vk::QueueFamilyIgnored);
+        barrier.setSrcQueueFamilyIndex(vk::QueueFamilyIgnored);
         barrier.setImage(image);
         barrier.setOldLayout(oldLayout);
         barrier.setNewLayout(newLayout);
