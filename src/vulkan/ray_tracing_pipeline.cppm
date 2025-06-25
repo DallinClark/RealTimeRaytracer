@@ -13,6 +13,8 @@ import vulkan.context.device;
 import vulkan.context.command_pool;
 import vulkan.memory.buffer;
 
+import scene.scene_info;
+
 // TODO redo this class to be better at creating sbts
 namespace vulkan {
 
@@ -120,6 +122,16 @@ namespace vulkan {
         vk::PipelineLayoutCreateInfo layoutInfo{};
         layoutInfo.setLayoutCount = descriptorSetLayouts_.size();
         layoutInfo.pSetLayouts = &descriptorSetLayouts_[0];
+
+        // For now, just add one push constant that is a SceneInfo struct
+        vk::PushConstantRange pushConstant;
+        pushConstant.setOffset(0);
+        pushConstant.setSize(sizeof(scene::SceneInfo));
+        pushConstant.setStageFlags(vk::ShaderStageFlagBits::eClosestHitKHR);
+
+        layoutInfo.setPPushConstantRanges(&pushConstant);
+        layoutInfo.setPushConstantRangeCount(1);
+
         pipelineLayout_ = device_.get().createPipelineLayoutUnique(layoutInfo);
     }
 

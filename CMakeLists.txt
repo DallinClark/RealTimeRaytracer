@@ -165,10 +165,12 @@ add_executable(${PROJECT_NAME}
         external/stb/stb_image.h
         src/app/setup/geometry_builder.cppm
         src/vulkan/memory/image_sampler.cppm
-        src/scene/geometry/object.cppm
-        src/scene/textures/texture.cppm
+        src/scene/object.cppm
         external/LUT/ltc_matrix.h
         src/scene/area_light.cppm
+        src/scene/scene_info.cppm
+        src/app/setup/create_scene.cppm
+        src/core/utils.cppm
 )
 
 # --- MODULE SUPPORT -----------------------------------------
