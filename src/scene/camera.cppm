@@ -23,7 +23,6 @@ namespace scene {
             glm::vec3 topLeftViewportCorner;  float _pad1 = 0.0f; // 16 bytes
             glm::vec3 horizontalViewportDelta; float _pad2 = 0.0f; // 16 bytes
             glm::vec3 verticalViewportDelta;  float _pad3 = 0.0f; // 16 bytes
-            uint32_t numAreaLights = 2;           uint32_t _pad4[3] = {}; // Pad to next 16-byte boundary
         };
 
         Camera(const vulkan::context::Device& device, float fovY, glm::vec3 position, glm::vec3 lookAt,

@@ -31,13 +31,14 @@ import app.window;
 import core.file;
 
 import scene.camera;
+import scene.scene_info;
 import scene.geometry.vertex;
 import scene.geometry.triangle;
-import scene.geometry.object;
+import scene.object;
 import scene.area_light;
-import scene.textures.texture;
 
 import app.setup.geometry_builder;
+import app.setup.create_scene;
 
 import vulkan.memory.image_sampler;
 
@@ -102,90 +103,62 @@ export namespace app {
             vulkan::memory::Image outputImage(device_->get(), device_->physical(), extent,
                                               vk::Format::eR8G8B8A8Unorm, vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc, vk::ImageAspectFlagBits::eColor);
 
-            auto cmdImage = commandPool.getSingleUseBuffer(); // TODO maybe wrap this a bit better
+            auto cmdImage = commandPool.getSingleUseBuffer();
             vulkan::memory::Image::setImageLayout(*cmdImage, outputImage.getImage(), vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral);
             commandPool.submitSingleUse(std::move(cmdImage), device_->computeQueue());
             device_->get().waitIdle();
 
             vk::Buffer cameraBuffer = camera_->getBuffer();
 
-            // vector of area lights
-            std::vector<scene::AreaLight> lights = {
-                    {30.0, {0.3,1.0,0.3}, {{-4.0,0.0,-2.0}, {-4.0,0.0,2.0},{-4.0,2.0,2.0},{-4.0,2.0,-2.0}}},
-                    {30.0, {1.0,0.3,0.3}, {{4.0,0.0,-2.0}, {4.0,0.0,2.0},{4.0,2.0,2.0},{4.0,2.0,-2.0}}}
-            };
+            // Create the objects in the scene
+            std::vector<scene::Object> objects = {};
+            scene::Object floor("../../assets/objects/basic_geo/cube.obj");
+            floor.setSpecular(0.8);
+            floor.setColor(glm::vec3(0.3));
+            floor.scale(3.0);
+            floor.move(glm::vec3(0.0,-11.165,0.0));
+            objects.push_back(floor);
 
-            // obj and texture vectors with indices matching
-            std::vector<std::string> objPaths = { "../../assets/objects/toycar/toycar.obj",      // 0
-                                                  "../../assets/objects/toycar/car_stand.obj",
-                                                  "../../assets/objects/basic_geo/cube.obj"};  // 1
+            scene::Object toyCar("../../assets/objects/toycar/toycar.obj");
+            toyCar.setSpecular(0.05);
+            toyCar.setMetallic(0.0);
+            toyCar.setColor("../../assets/textures/toycar/toycar_color.png");
+            toyCar.scale(50.0);
+            objects.push_back(toyCar);
 
-            std::vector<scene::textures::Texture> textures;
-            textures.push_back(scene::textures::Texture::createLTCtables(*device_, commandPool)); // 0
-            textures.push_back(scene::textures::Texture(*device_, commandPool, "../../assets/textures/toycar/toycar_color.png", "../../assets/textures/toycar/toycar_occlusion_roughness_metallic.png")); //1
-            textures.push_back(scene::textures::Texture(*device_, commandPool, "../../assets/textures/toycar/car_stand_color.png", "","","")); // 2
-            textures.push_back(scene::textures::Texture(*device_, commandPool, "../../assets/textures/basic/gray.png", "", "", "")); // 3
+            scene::Object carStand("../../assets/objects/toycar/car_stand.obj");
+            carStand.setSpecular(0.8);
+            carStand.setMetallic(0.0);
+            carStand.setColor("../../assets/textures/toycar/car_stand_color.png");
+            carStand.scale(50.0);
+            objects.push_back(carStand);
 
-            // Sets up the textures
-            vulkan::memory::ImageSampler texSampler(*device_.get());
-            std::vector<vk::DescriptorImageInfo> descriptorTextures = {};
-            for (const auto& texture : textures) {
-                const vulkan::memory::Image& colorImage = texture.getColorImage();
-                const vulkan::memory::Image&  materialImage = texture.getMaterialImage();
-                descriptorTextures.push_back(colorImage.getImageInfoWithSampler(texSampler.get()));
-                descriptorTextures.push_back(materialImage.getImageInfoWithSampler(texSampler.get()));
-            }
+            // Create the area lights in the scene, they start at the origin, facing down the z axis, with side lengths of 1
+            std::vector<scene::AreaLight> lights = {};
+            // takes in intensity and color
+            scene::AreaLight light1(8.0, glm::vec3(1.0,1.0,1.0));
+            light1.scale(glm::vec3(3.0,2.0,2.0));
+            light1.move(glm::vec3(3.0,3.0,0.0));
+            light1.rotate(glm::vec3(-45.0,00.0,0.0));
+            light1.rotate(glm::vec3(0.0,90.0,0.0));
+            lights.push_back(light1);
 
-            /* create info for each of the objects, in this order:
-             * transform
-             * index into obj path vector / blas vector
-             * index into the texture vector,
-             * used to create info for each BLAS instance, and used in the GPU for object info */
+//            scene::AreaLight light2(80.0, glm::vec3(1.0,1.0,1.0));
+//            light2.scale(glm::vec3(5.0,1.0,1.0));
+//            light2.move(glm::vec3(6.0,5.0,0.0));
+//            light2.rotate(glm::vec3(90.0,90.0,0.0));
+//            lights.push_back(light2);
 
-            std::vector<scene::geometry::ObjectCreateInfo> objectCreateInfos = {};
-            objectCreateInfos.push_back( scene::geometry::ObjectCreateInfo {
-                    vk::TransformMatrixKHR{
-                            std::array<std::array<float, 4>, 3>{{
-                                                                        {100.0f, 0.0f, 0.0f, 0.0f},  // Translate X by 5 units
-                                                                        {0.0f, 100.0f, 0.0f, 0.0f},
-                                                                        {0.0f, 0.0f, 100.0f, 0.0f}
-                                                                }}},
-                    0,  // Index into objPaths (i.e., pig_head.obj)
-                    1   // Index into textures
-            });
+            auto sceneInfo = std::move(app::setup::CreateScene::createSceneFromObjectsAndLights(*device_, commandPool, objects, lights));
+            auto descriptorTextures = std::move(sceneInfo.descriptorTextures);
 
-            objectCreateInfos.push_back( scene::geometry::ObjectCreateInfo {
-                    vk::TransformMatrixKHR{
-                            std::array<std::array<float, 4>, 3>{{
-                                                                        {100.0f, 0.0f, 0.0f, 0.0f},  // Translate X by 0 units
-                                                                        {0.0f, 100.0f, 0.0f, 0.0f},
-                                                                        {0.0f, 0.0f, 100.0f, 0.0f}
-                                                                }}},
-                    1,  // Index into objPaths (i.e., pig_head.obj)
-                    2   // Index into textures
-            });
-//
-            objectCreateInfos.push_back( scene::geometry::ObjectCreateInfo {
-                    vk::TransformMatrixKHR{
-                            std::array<std::array<float, 4>, 3>{{
-                                                                        {5.0f, 0.0f, 0.0f, 0.0f},  // Translate X by 0 units
-                                                                        {0.0f, 1.0f, 0.0f, -5.09f},
-                                                                        {0.0f, 0.0f, 5.0f, 0.0f}
-                                                                }}},
-                    2,  // Index into objPaths (i.e., pig_head.obj)
-                    3   // Index into textures
-            });
-
-
-
-
-            auto geoReturnInfo = app::setup::GeometryBuilder::createTLASFromOBJsAndTransforms(*device_, commandPool, objPaths, objectCreateInfos, lights);
-            std::vector<glm::vec3>                     vertexPositions = geoReturnInfo.vertexPositions;
-            std::vector<scene::geometry::Vertex>       vertices = geoReturnInfo.vertices;
-            std::vector<uint32_t>                      indices = geoReturnInfo.indices;
-            std::unique_ptr<vulkan::raytracing::TLAS>  tlas = std::move(geoReturnInfo.tlas);
-            vulkan::memory::Buffer                     vertexPositionBuffer = std::move(geoReturnInfo.vertexBuffer);
-            vulkan::memory::Buffer                     indexBuffer = std::move(geoReturnInfo.indexBuffer);
+            auto geometryInfo = std::move(sceneInfo.geoReturnInfo);
+            std::vector<glm::vec3>                     vertexPositions = geometryInfo.vertexPositions;
+            std::vector<scene::geometry::Vertex>       vertices = geometryInfo.vertices;
+            std::vector<uint32_t>                      indices = geometryInfo.indices;
+            std::unique_ptr<vulkan::raytracing::TLAS>  tlas = std::move(geometryInfo.tlas);
+            vulkan::memory::Buffer                     vertexPositionBuffer = std::move(geometryInfo.vertexBuffer);
+            vulkan::memory::Buffer                     indexBuffer = std::move(geometryInfo.indexBuffer);
 
             // create shader vertex buffer
             vk::DeviceSize verticesSize = sizeof(scene::geometry::Vertex) * vertices.size();
@@ -196,33 +169,43 @@ export namespace app {
                                                                                                   vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress
                                                                                                   | vk::BufferUsageFlagBits::eTransferDst, vertexDataRegions);
 
-            auto hdriImage = core::file::createTextureImage(*device_.get(), "../../assets/textures/hdris/sky4k.hdr", commandPool);
+            auto hdriImage = core::file::createTextureImage(*device_.get(), "../../assets/textures/hdris/sky4k.hdr", commandPool, false);
             vulkan::memory::ImageSampler hdriSampler(*device_.get());
 
-
-            std::vector<vulkan::raytracing::TLAS::BLASInstanceInfo> blasInfos = tlas->getBLASInfos();
-            vk::DeviceSize blasInfosSize = blasInfos.size() * sizeof(vulkan::raytracing::TLAS::BLASInstanceInfo);
-            std::vector<vulkan::memory::Buffer::FillRegion> blasInfoDataRegions {
-                    {blasInfos.data() , blasInfosSize, 0},
+            // Object Info Buffer
+            std::vector<scene::Object::GPUObjectInfo> objectInfos = sceneInfo.GPUObjects;
+            vk::DeviceSize objectInfosSize = objectInfos.size() * sizeof(scene::Object::GPUObjectInfo);
+            std::vector<vulkan::memory::Buffer::FillRegion> objectInfoDataRegions {
+                    {objectInfos.data() , objectInfosSize, 0},
             };
-            vulkan::memory::Buffer blasInfoBuffer = vulkan::memory::Buffer::createDeviceLocalBuffer(commandPool, *device_, blasInfos.size() * sizeof(vulkan::raytracing::TLAS::BLASInstanceInfo),
+            vulkan::memory::Buffer objectInfoBuffer = vulkan::memory::Buffer::createDeviceLocalBuffer(commandPool, *device_, objectInfosSize,
                                                                                                     vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress
-                                                                                                    | vk::BufferUsageFlagBits::eTransferDst, blasInfoDataRegions); // TODO make into a uniform buffer
+                                                                                                    | vk::BufferUsageFlagBits::eTransferDst, objectInfoDataRegions);
+
+            // Light Info Buffer
+            std::vector<scene::AreaLight::GPUAreaLightInfo> lightInfos = sceneInfo.GPUAreaLights;
+            vk::DeviceSize lightInfosSize = lightInfos.size() * sizeof(scene::AreaLight::GPUAreaLightInfo);
+            std::vector<vulkan::memory::Buffer::FillRegion> lightInfoDataRegions {
+                    {lightInfos.data() , lightInfosSize, 0},
+            };
+            vulkan::memory::Buffer lightInfoBuffer = vulkan::memory::Buffer::createDeviceLocalBuffer(commandPool, *device_, lightInfosSize,
+                                                                                                    vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress
+                                                                                                    | vk::BufferUsageFlagBits::eTransferDst, lightInfoDataRegions);
 
             /* JUST FOR TESTING */
             // FOR NOW JUST ONE DESCRIPTOR SET
             vulkan::memory::DescriptorSetLayout layout(device_->get());
             // Create the camera
 
-            layout.addBinding(0, vk::DescriptorType::eStorageImage,  vk::ShaderStageFlagBits::eRaygenKHR); // image
+            layout.addBinding(0, vk::DescriptorType::eStorageImage,  vk::ShaderStageFlagBits::eRaygenKHR); // render image
             layout.addBinding(1, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR);  // TLAS
             layout.addBinding(2, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR);  // camera
             layout.addBinding(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR); // vertex buffer
-            layout.addBinding(4, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR);
-            layout.addBinding(5, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eClosestHitKHR, static_cast<uint32_t>(descriptorTextures.size()));
-            layout.addBinding(6, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR);
-            layout.addBinding(7, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR);
-            layout.addBinding(8, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eMissKHR);
+            layout.addBinding(4, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR); // index buffer
+            layout.addBinding(5, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eClosestHitKHR, static_cast<uint32_t>(descriptorTextures.size())); // textures
+            layout.addBinding(6, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR); //object infos
+            layout.addBinding(7, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR); // light infos
+            layout.addBinding(8, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eMissKHR); // hdri
 
             layout.build();
 
@@ -244,8 +227,8 @@ export namespace app {
             pool.writeBuffer(set, 3, vertexBuffer.get(), sizeof(scene::geometry::Vertex) * vertices.size() , vk::DescriptorType::eStorageBuffer, 0);
             pool.writeBuffer(set, 4, indexBuffer.get(), indices.size() * sizeof(uint32_t), vk::DescriptorType::eStorageBuffer, 0);
             pool.writeImages(set, 5, descriptorTextures, vk::DescriptorType::eCombinedImageSampler);
-            pool.writeBuffer(set, 6, blasInfoBuffer.get(), blasInfosSize, vk::DescriptorType::eStorageBuffer, 0);
-            pool.writeBuffer(set, 7, vertexPositionBuffer.get(), vertices.size() * sizeof(glm::vec3), vk::DescriptorType::eStorageBuffer, 0);
+            pool.writeBuffer(set, 6, objectInfoBuffer.get(), objectInfosSize, vk::DescriptorType::eStorageBuffer, 0);
+            pool.writeBuffer(set, 7, lightInfoBuffer.get(), lightInfosSize, vk::DescriptorType::eStorageBuffer, 0);
             pool.writeImage(set, 8, hdriImage->getImageInfoWithSampler(hdriSampler.get()), vk::DescriptorType::eCombinedImageSampler);
 
             std::vector<vk::DescriptorSetLayout> descriptorLayouts{layout.get()};
@@ -259,12 +242,13 @@ export namespace app {
             uint32_t imageIndex = 0;
             vk::UniqueSemaphore imageAcquiredSemaphore = device_->get().createSemaphoreUnique(vk::SemaphoreCreateInfo());
 
+            scene::SceneInfo sceneData(frame, lights.size(), camera_->getPosition());
+
             // Main Loop
             while (!window_->shouldClose()) {
                 float newTime = window_->getTime();
                 float frameTime = newTime - currentTime;
                 currentTime = newTime;
-
                 camera_->updateGPUData();
                 glfwPollEvents();
                 window_->processInput(newTime, CAM_SPEED);
@@ -274,6 +258,9 @@ export namespace app {
                 auto cmd = commandPool.getSingleUseBuffer();
                 cmd->bindPipeline(vk::PipelineBindPoint::eRayTracingKHR, raytracePipeline.get());
                 cmd->bindDescriptorSets(vk::PipelineBindPoint::eRayTracingKHR, raytracePipeline.getLayout(), 0, set, nullptr);
+                sceneData.frame = frame;
+                sceneData.camPosition = camera_->getPosition();
+                cmd->pushConstants<scene::SceneInfo>(raytracePipeline.getLayout(),vk::ShaderStageFlagBits::eClosestHitKHR, 0, sceneData);
                 raytracePipeline.recordTraceRays(*cmd, extent);
 
                 vk::Image srcImage = outputImage.getImage();
@@ -298,6 +285,7 @@ export namespace app {
                     throw std::runtime_error("failed to present.");
                 }
                 device_->presentQueue().waitIdle();
+                ++frame;
             }
             core::log::info("Main loop exited");
         }

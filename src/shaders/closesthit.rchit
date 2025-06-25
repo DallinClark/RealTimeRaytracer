@@ -11,13 +11,20 @@
 
 hitAttributeEXT vec2 attribs;
 
+layout( push_constant ) uniform constants
+{
+	uint frame;
+	uint numLights;
+    uint _pad0;
+    uint _pad1;
+	vec3 camPosition;
+	float padding_;
+} sceneData;
+
 layout(location = 0) rayPayloadInEXT RayPayload payloadIn;
 layout(location = 1) rayPayloadEXT bool isShadowed;
 
 layout(set = 0, binding = 1) uniform accelerationStructureEXT topLevelAS;
-layout(set = 0, binding = 2) uniform CameraUBO {
-    GPUCameraData cam;
-};
 layout(set = 0, binding = 3) readonly buffer VertexBuffer {
     Vertex vertices[];
 };
@@ -27,6 +34,9 @@ layout(set = 0, binding = 4) readonly buffer IndexBuffer {
 layout(set = 0, binding = 5) uniform sampler2D texSamplers[];
 layout(set = 0, binding = 6) readonly buffer ObjectInfoBuffer {
     ObjectInfo objectInfos[];
+};
+layout(set = 0, binding = 7) readonly buffer LightInfoBuffer {
+    LightInfo lightInfos[];
 };
 
 const float LUT_SIZE  = 64.0; // ltc_texture size
@@ -117,17 +127,15 @@ vec3 LTC_Evaluate(vec3 N, vec3 V, vec3 P, mat3 Minv, vec3 points[4], bool twoSid
 }
 
 void main() {
-
-    ObjectInfo objectInfo = objectInfos[gl_InstanceCustomIndexEXT];
-
-
-    if (objectInfo.intensity > 0) {
-        payloadIn.primaryColor = objectInfo.emmisiveColor;
+    if (gl_InstanceCustomIndexEXT < sceneData.numLights) {  // If this is a light
+        payloadIn.primaryColor = lightInfos[gl_InstanceCustomIndexEXT].color;
         return;
     }
 
-    uint vertexOffset = objectInfo.vertexIndexOffset;
-    uint indexOffset = objectInfo.indexIndexOffset;
+    ObjectInfo objectInfo = objectInfos[gl_InstanceCustomIndexEXT - sceneData.numLights];
+
+    uint vertexOffset = objectInfo.vertexOffset;
+    uint indexOffset = objectInfo.indexOffset;
 
     uint index0 = indices[3 * gl_PrimitiveID + 0 + indexOffset];
     uint index1 = indices[3 * gl_PrimitiveID + 1 + indexOffset];
@@ -149,39 +157,32 @@ void main() {
     vec3 hitNormal = normalize(normalMatrix * interpolatedLocalNormal);
     vec2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
 
-    vec3 surfaceColor = texture(nonuniformEXT(texSamplers[objectInfo.textureIndex * 2]), uv).rgb;
-    vec3 surfaceMaterial = texture(nonuniformEXT(texSamplers[objectInfo.textureIndex * 2 + 1]), uv).rgb;
+    float roughness = 0.0;
+    float metallic = 0.0;
+    vec3 surfaceColor = vec3(0.0);
 
-    vec3 viewDir = normalize(cam.position - hitPoint);
-   //vec3 halfVector = normalize(lightDir + viewDir);
+    if (objectInfo.usesColorMap != 0) {
+          surfaceColor = texture(nonuniformEXT(texSamplers[objectInfo.colorIndex]), uv).rgb;
+    } else {
+        surfaceColor = objectInfo.color;
+    }
 
+    if (objectInfo.usesSpecularMap != 0) {
+        roughness = texture(nonuniformEXT(texSamplers[objectInfo.specularIndex]), uv).r;
+    } else {
+        roughness = objectInfo.specular;
+    }
 
-   if (payloadIn.depth < 4) {
-       payloadIn.depth += 1;
-       vec3 reflectedDir = reflect(-viewDir, hitNormal);
-       vec3 reflectedOrigin = hitPoint + hitNormal * 0.01;
+    if (objectInfo.usesMetallicMap != 0) {
+        metallic = texture(nonuniformEXT(texSamplers[objectInfo.metallicIndex]), uv).r;
+    } else {
+        metallic = objectInfo.metallic;
+    }
 
-       traceRayEXT(
-           topLevelAS,
-           gl_RayFlagsOpaqueEXT,
-           0xFF,
-           0, 0, 0,
-           reflectedOrigin,
-           0.001,
-           reflectedDir,
-           1000.0,
-           0 // payload location
-       );
-   }
+    vec3 viewDir = normalize(sceneData.camPosition - hitPoint);
 
-   float roughness = surfaceMaterial.r;
-   roughness = clamp(roughness, 0.01, 1.0);
-   float metallic = surfaceMaterial.b;
-
-   //roughness = 0.0;
-    vec3 F0 = mix(vec3(0.04), surfaceColor, metallic);
     vec3 mDiffuse = (1.0 - metallic) * surfaceColor;
-    vec3 mSpecular = F0;
+    vec3 mSpecular = mix(vec3(0.04), surfaceColor, metallic);
 
    vec3 N = hitNormal;
    vec3 V = viewDir;
@@ -206,40 +207,41 @@ void main() {
        vec3(t1.z, 0, t1.w)
    );
 
-   vec3 result = vec3(0.0);
+  vec3 result = vec3(0.0);
+  vec3 specular = vec3(0.0);
+  vec3 diffuse = vec3(0.0);
 
-   for (uint i = 0; i < cam.numLights; ++i) {
 
-       ObjectInfo lightInfo = objectInfos[i];
+   for (uint i = 0; i < sceneData.numLights; ++i) {
 
-       uint lightVertexOffset = lightInfo.vertexIndexOffset;
+       LightInfo currLight = lightInfos[i];
+
+       uint lightVertexOffset = currLight.vertexOffset;
 
        Vertex lv0 = vertices[lightVertexOffset + 0];
        Vertex lv1 = vertices[lightVertexOffset + 1];
        Vertex lv2 = vertices[lightVertexOffset + 2];
        Vertex lv3 = vertices[lightVertexOffset + 3];
 
-
-
-       // Optional: if you want lights to be translated in space
-       vec3 areaLightTranslate = vec3(0.0); // define if needed
+       mat4 lightTransform = currLight.transform;
 
        vec3 translatedPoints[4];
-       translatedPoints[0] = lv0.position + areaLightTranslate;
-       translatedPoints[1] = lv1.position + areaLightTranslate;
-       translatedPoints[2] = lv2.position + areaLightTranslate;
-       translatedPoints[3] = lv3.position + areaLightTranslate;
+       translatedPoints[0] = (lightTransform * vec4(lv0.position, 1.0)).xyz;
+       translatedPoints[1] = (lightTransform * vec4(lv1.position, 1.0)).xyz;
+       translatedPoints[2] = (lightTransform * vec4(lv2.position, 1.0)).xyz;
+       translatedPoints[3] = (lightTransform * vec4(lv3.position, 1.0)).xyz;
 
-       const uint numShadowSamples = 18;
+       const uint numShadowSamples = 24;
        float shadowFactor = 0.0;
        vec3 lightSamplePos = vec3(0.0);
+
 
 
        for (uint s = 0; s < numShadowSamples; ++s) {
            // Compute shadow ray direction towards some point on the area light
            // For now, just pick a simple center or random point on the light
            uvec2 pixel = gl_LaunchIDEXT.xy;
-           uint seed = s + pixel.x * 733 + pixel.y * 1933;
+           uint seed = s + pixel.x * 733 + pixel.y * 1933 + sceneData.frame;
 
             float r1 = random(seed);
             float r2 = random(seed + 100);
@@ -281,7 +283,7 @@ void main() {
                shadowRayOrigin,
                0.001,
                shadowRayDir,
-               lightDistance - 0.01,
+               lightDistance - 0.5,
                1 // location of shadow ray payload
            );
 
@@ -293,18 +295,16 @@ void main() {
 
        bool twoSided = true;
 
-       vec3 diffuse = LTC_Evaluate(N, V, P, mat3(1), translatedPoints, twoSided);
-       vec3 specular = LTC_Evaluate(N, V, P, Minv, translatedPoints, twoSided);
+       diffuse = LTC_Evaluate(N, V, P, mat3(1), translatedPoints, twoSided);
+       specular = LTC_Evaluate(N, V, P, Minv, translatedPoints, twoSided);
 
 
        vec3 fresnel = mSpecular * t2.x + (vec3(1.0) - mSpecular) * t2.y;
        specular *= fresnel;
-       specular *= mix(vec3(1.0), payloadIn.reflectionColor, metallic);
 
-       result += lightInfo.emmisiveColor * lightInfo.intensity * shadowFactor * (specular + mDiffuse * diffuse);
+       result += currLight.color * currLight.intensity * shadowFactor * (specular + mDiffuse * diffuse);
    }
 
-   payloadIn.reflectionColor = result;
    payloadIn.primaryColor = result;
 
 }

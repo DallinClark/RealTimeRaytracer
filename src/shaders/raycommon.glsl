@@ -12,7 +12,6 @@ struct GPUCameraData {
     vec3 topLeftViewportCorner; float _pad1;
     vec3 horizontalViewportDelta; float _pad2;
     vec3 verticalViewportDelta; float _pad3;
-    uint numLights;             uint _pad4[3];
 };
 
 struct CombinedPayload {
@@ -20,6 +19,11 @@ struct CombinedPayload {
     bool isShadowed;
     int depth;
 };
+
+//struct SceneInfo {
+//    uint frame;
+//    uint numAreaLights;
+//};
 
 float random(uint seed) {
     uint state = uint(seed) * 747796405u + 2891336453u;
@@ -29,19 +33,37 @@ float random(uint seed) {
 }
 
 struct ObjectInfo {
-    uint vertexIndexOffset;   // 4
-    uint indexIndexOffset;    // 4
-    uint textureIndex;        // 4
-    uint _padding0;           // 4 -> align next to 16
+    uint vertexOffset;
+    uint indexOffset;
 
-    float intensity;          // 4
-    float _padding1;          // 4
-    float _padding2;          // 4
-    float _padding3;          // 4 -> align next vec3
+    // 0 is false, 1 is true
+    uint usesColorMap;
+    uint usesSpecularMap;
+    uint usesMetallicMap;
 
-    vec3 emmisiveColor;       // 12
-    float _padding4;          // 4 -> pad to make struct size 48 bytes (aligned to 16)
+    uint colorIndex;
+    uint specularIndex;
+    uint metallicIndex;
+
+    vec3 color;
+    float pad1_;
+
+    float specular;
+    float metallic;
+    vec2 pad2_;
 };
+
+struct LightInfo {
+    vec3 color;
+    float intensity;
+
+    uint vertexOffset;
+    uint isTwoSided;
+    vec2 pad;
+
+    mat4 transform;
+};
+
 
 struct RayPayload {
     vec3 primaryColor;
