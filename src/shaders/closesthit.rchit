@@ -231,11 +231,12 @@ void main() {
        translatedPoints[2] = (lightTransform * vec4(lv2.position, 1.0)).xyz;
        translatedPoints[3] = (lightTransform * vec4(lv3.position, 1.0)).xyz;
 
-       const uint numShadowSamples = 24;
-       float shadowFactor = 0.0;
        vec3 lightSamplePos = vec3(0.0);
 
 
+
+       const uint numShadowSamples = 12;
+       float shadowFactor = 0.0;
 
        for (uint s = 0; s < numShadowSamples; ++s) {
            // Compute shadow ray direction towards some point on the area light
@@ -262,7 +263,7 @@ void main() {
                        r2 = 1.0 - r2;
                    }
                    lightSamplePos = translatedPoints[0] + r1 * (translatedPoints[2] - translatedPoints[0]) + r2 * (translatedPoints[3] - translatedPoints[0]);
-               }
+           }
 
 
            vec3 shadowRayDir = normalize(lightSamplePos - hitPoint);
@@ -279,7 +280,7 @@ void main() {
                topLevelAS,
                shadowFlags,
                0xFF,
-               0, 0, 0,
+               0, 0, 1,
                shadowRayOrigin,
                0.001,
                shadowRayDir,
