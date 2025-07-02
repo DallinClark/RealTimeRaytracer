@@ -86,6 +86,12 @@ if (NOT TARGET glm::glm)
 endif()
 
 # ----------------------------------------------------------------------------
+# NRD
+# ----------------------------------------------------------------------------
+set(NRD_ROOT "$ENV{HOME}/tools/nrd")
+add_subdirectory(${NRD_ROOT} ${CMAKE_BINARY_DIR}/nrd_build)
+
+# ----------------------------------------------------------------------------
 # Convert GLSL files to SPIR-V
 # ----------------------------------------------------------------------------
 
@@ -204,7 +210,9 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
         glfw
         glm::glm
         tinyobjloader
+        NRD
 )
+target_include_directories(RealTimeRaytracer PRIVATE ${NRD_ROOT}/Include)
 
 target_compile_definitions(RealTimeRaytracer
         PRIVATE
