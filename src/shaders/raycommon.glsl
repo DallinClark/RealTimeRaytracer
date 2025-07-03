@@ -5,6 +5,7 @@ struct Vertex {
     vec3 position; float pad0;
     vec3 normal;   float pad1;
     vec2 uv;       vec2 pad2;
+    vec3 tangent; float pad3;
 };
 
 struct GPUCameraData {
@@ -15,8 +16,9 @@ struct GPUCameraData {
 };
 
 struct CombinedPayload {
-    vec3 color;
-    bool isShadowed;
+    vec3 primaryColor;
+    float shadow;
+    vec3 reflectionColor;
     int depth;
 };
 
@@ -53,6 +55,17 @@ struct ObjectInfo {
     vec2 pad2_;
 };
 
+struct HitInfo {
+    uint  renderNodeIndex;
+    uint  renderPrimIndex;  // what mesh we hit
+    float hitT;             // where we hit the mesh along the ray
+    vec3  tangent;
+    vec3  normal_envmapRadiance;  // when hitT == NRD_INF we hit the environment map and return its radiance here
+    vec2  uv;
+    float bitangentSign;
+    ObjectInfo objInfo;
+};
+
 struct LightInfo {
     vec3 color;
     float intensity;
@@ -74,6 +87,12 @@ struct RayPayload {
 
 struct ShadowRayPayload {
     bool isShadowed;
+};
+
+struct HitState {
+    vec3 pos;
+    vec3 nrm;
+    vec2 uv;
 };
 
 #endif

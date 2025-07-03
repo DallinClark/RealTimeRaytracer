@@ -127,7 +127,7 @@ namespace vulkan {
         vk::PushConstantRange pushConstant;
         pushConstant.setOffset(0);
         pushConstant.setSize(sizeof(scene::SceneInfo));
-        pushConstant.setStageFlags(vk::ShaderStageFlagBits::eClosestHitKHR);
+        pushConstant.setStageFlags(vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eRaygenKHR);
 
         layoutInfo.setPPushConstantRanges(&pushConstant);
         layoutInfo.setPushConstantRangeCount(1);
