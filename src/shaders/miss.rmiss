@@ -11,6 +11,8 @@ layout(location = 0) rayPayloadInEXT RayPayload payload;
 void main() {
 
     // Convert ray direction into a UV for environment map sampling
+    payload.primaryColor = vec3(0.0,0.0,0.0);
+    return;
     vec3 dir = normalize(gl_WorldRayDirectionEXT);
     float u = atan(dir.z, dir.x) / (2.0 * 3.14159265) + 0.5;
     float v = acos(clamp(dir.y, -1.0, 1.0)) / 3.14159265;

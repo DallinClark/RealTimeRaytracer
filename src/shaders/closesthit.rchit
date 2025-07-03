@@ -235,8 +235,11 @@ void main() {
 
 
 
-       const uint numShadowSamples = 12;
+       const uint numShadowSamples = 4;
        float shadowFactor = 0.0;
+
+       vec3 shadowedSampleColor   = vec3(0.0);
+       vec3 unshadowedSampleColor = vec3(0.0);
 
        for (uint s = 0; s < numShadowSamples; ++s) {
            // Compute shadow ray direction towards some point on the area light
@@ -266,7 +269,7 @@ void main() {
            }
 
 
-           vec3 shadowRayDir = normalize(lightSamplePos - hitPoint);
+           vec3 sampledLightDir = normalize(lightSamplePos - hitPoint);
            float lightDistance = length(lightSamplePos - hitPoint);
 
            vec3 shadowRayOrigin = hitPoint + hitNormal * 0.01;
@@ -283,14 +286,42 @@ void main() {
                0, 0, 1,
                shadowRayOrigin,
                0.001,
-               shadowRayDir,
+               sampledLightDir,
                lightDistance - 0.5,
                1 // location of shadow ray payload
            );
 
            // if any hit, isShadowed will be true, so shadowFactor only adds when not shadowed
-           shadowFactor += isShadowed ? 0.0 : 1.0;
+           float currShadow = isShadowed ? 0.0 : 1.0;
+           shadowFactor += currShadow;
+
+           vec3 halfVector = normalize(viewDir + sampledLightDir);
+
+           vec3 F0 = mSpecular;
+           float cosTheta = clamp(dot(viewDir, halfVector), 0.0, 1.0);
+
+           float D = GGX_Distribution(hitNormal, halfVector, roughness);
+           float G = GGX_PartialGeometryTerm(viewDir, hitNormal, halfVector, roughness) * GGX_PartialGeometryTerm(sampledLightDir, hitNormal, halfVector, roughness);
+           vec3 F = Fresnel_Schlick(cosTheta, F0);
+
+           float NdotV = max(dot(hitNormal, viewDir), 0.0001);
+           float NdotL = max(dot(hitNormal, sampledLightDir), 0.0001);
+
+           vec3 currSpecular = (D * F * G) / (4.0 * NdotV * NdotL);
+           vec3 currDiffuse = (1.0 - metallic) * surfaceColor / PI; // Lambert diffuse term
+
+           vec3 lightVec = lightSamplePos - hitPoint;
+           float distance = length(lightVec);
+           float attenuation = 1.0 / (distance * distance);
+
+           vec3 BRDF = currSpecular + currDiffuse;
+           vec3 L = currLight.color * currLight.intensity * NdotL * attenuation;
+
+            shadowedSampleColor   += currShadow * BRDF * L;
+            unshadowedSampleColor += BRDF * L;
        }
+       shadowedSampleColor   /= float(numShadowSamples);
+       unshadowedSampleColor /= float(numShadowSamples);
 
        shadowFactor /= float(numShadowSamples);
 
@@ -303,7 +334,7 @@ void main() {
        vec3 fresnel = mSpecular * t2.x + (vec3(1.0) - mSpecular) * t2.y;
        specular *= fresnel;
 
-       result += currLight.color * currLight.intensity * shadowFactor * (specular + mDiffuse * diffuse);
+       result += currLight.color * currLight.intensity * (specular + mDiffuse * diffuse) * (shadowedSampleColor / unshadowedSampleColor);
    }
 
    payloadIn.primaryColor = result;
