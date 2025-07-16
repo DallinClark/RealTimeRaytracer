@@ -56,14 +56,13 @@ struct ObjectInfo {
 };
 
 struct HitInfo {
-    uint  renderNodeIndex;
-    uint  renderPrimIndex;  // what mesh we hit
-    float hitT;             // where we hit the mesh along the ray
-    vec3  tangent;
-    vec3  normal_envmapRadiance;  // when hitT == NRD_INF we hit the environment map and return its radiance here
-    vec2  uv;
-    float bitangentSign;
-    ObjectInfo objInfo;
+    vec3 hitPoint; float pad0_;
+    vec3 normal;   float pad1_; // doubles as color if it's a light
+    vec2 uv;       vec2 pad2_;
+    uint objectInfoIndex;
+    uint hitLight;          // 0 IS FALSE, 1 IS TRUE
+    uint missed; uint pad3_;
+
 };
 
 struct LightInfo {

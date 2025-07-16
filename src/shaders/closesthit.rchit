@@ -10,32 +10,42 @@
 
 hitAttributeEXT vec2 attribs;
 
-layout(location = 0) rayPayloadInEXT HitInfo payload;
+layout( push_constant ) uniform constants
+{
+	uint frame;
+	uint numLights;
+    uint _pad0;
+    uint _pad1;
+	vec3 camPosition;
+	float padding_;
+} sceneData;
 
-layout(set = 0, binding = 6) readonly buffer ObjectInfoBuffer {
-    ObjectInfo objectInfos[];
-};
+layout(location = 0) rayPayloadInEXT HitInfo payload;
 
 layout(set = 0, binding = 3) readonly buffer VertexBuffer {
     Vertex vertices[];
 };
-
 layout(set = 0, binding = 4) readonly buffer IndexBuffer {
     uint indices[];
 };
-
-layout( push_constant ) uniform constants
-{
-    uint frame;
-    uint numLights;
-    uint _pad0;
-    uint _pad1;
-    vec3 camPosition;
-    float padding_;
-} sceneData;
+layout(set = 0, binding = 5) uniform sampler2D texSamplers[];
+layout(set = 0, binding = 6) readonly buffer ObjectInfoBuffer {
+    ObjectInfo objectInfos[];
+};
+layout(set = 0, binding = 7) readonly buffer LightInfoBuffer {
+    LightInfo lightInfos[];
+};
 
 void main() {
-    ObjectInfo objectInfo = objectInfos[gl_InstanceCustomIndexEXT - sceneData.numLights];
+    if (gl_InstanceCustomIndexEXT < sceneData.numLights) {  // If this is a light
+        payload.hitLight = 1;
+        payload.normal = lightInfos[gl_InstanceCustomIndexEXT].color;
+        return;
+    }
+
+    // Get info at hit point
+    uint objInfoIndex = gl_InstanceCustomIndexEXT - sceneData.numLights;
+    ObjectInfo objectInfo = objectInfos[objInfoIndex];
 
     uint vertexOffset = objectInfo.vertexOffset;
     uint indexOffset = objectInfo.indexOffset;
@@ -53,20 +63,20 @@ void main() {
     vec3 v2position = v2.position;
 
     vec3 bary = vec3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
+    vec2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
+
     vec3 localPos = v0position * bary.x + v1position * bary.y + v2position * bary.z;
     vec3 hitPoint = vec3(gl_ObjectToWorldEXT * vec4(localPos, 1.0));
+
     vec3 interpolatedLocalNormal = normalize(v0.normal * bary.x + v1.normal * bary.y + v2.normal * bary.z);
     mat3 normalMatrix = transpose(inverse(mat3(gl_ObjectToWorldEXT)));
     vec3 hitNormal = normalize(normalMatrix * interpolatedLocalNormal);
-    vec2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
 
-    // Fill payload with interpolated values
-    payload.renderNodeIndex = gl_PrimitiveID;
-    payload.renderPrimIndex = gl_InstanceCustomIndexEXT;
-    payload.hitT = gl_HitTEXT;
-    payload.tangent = vec3(0);
-    payload.normal_envmapRadiance = hitNormal;
+    // Fill payload
+    payload.hitPoint = hitPoint;
+    payload.normal = hitNormal;
     payload.uv = uv;
-    payload.bitangentSign = 1.0; // You might want to store this per-vertex if needed
-    payload.objInfo = objectInfo;
+    payload.objectInfoIndex = objInfoIndex;
+    payload.hitLight = 0;
+
 }
