@@ -26,13 +26,12 @@ public:
 
     void writeAccelerationStructure(vk::DescriptorSet set, uint32_t binding, vk::DescriptorType type, vk::AccelerationStructureKHR TLAS);
 
-
-        ~DescriptorPool() = default;
+    ~DescriptorPool() = default;
 
     /// Allocate descriptor sets following the provided layouts.
     /// Returns a vector of handles; throws on failure.
-    std::vector<vk::DescriptorSet> allocate(const std::vector<DescriptorSetLayout>& layouts);
-    std::vector<vk::DescriptorSet> allocate(const DescriptorSetLayout& layout);
+    std::vector<vk::DescriptorSet> allocate(std::vector<DescriptorSetLayout*> layouts);
+    std::vector<vk::DescriptorSet> allocate(const DescriptorSetLayout layout);
 
     /// Reset the pool, freeing all allocated sets. Next alloc reuses space.
     void reset(vk::DescriptorPoolResetFlags flags = {}) noexcept {
@@ -67,10 +66,10 @@ DescriptorPool::DescriptorPool(
     }
 }
 
-std::vector<vk::DescriptorSet> DescriptorPool::allocate(const std::vector<DescriptorSetLayout>& layouts) {
+std::vector<vk::DescriptorSet> DescriptorPool::allocate(std::vector<DescriptorSetLayout*> layouts) {
     std::vector<vk::DescriptorSetLayout> vulkanLayouts;
     for (auto& layout : layouts) {
-        vulkanLayouts.push_back(layout.get());
+        vulkanLayouts.push_back(layout->get());
     }
 
     vk::DescriptorSetAllocateInfo allocInfo(
@@ -87,7 +86,7 @@ std::vector<vk::DescriptorSet> DescriptorPool::allocate(const std::vector<Descri
     }
 }
 
-std::vector<vk::DescriptorSet> DescriptorPool::allocate(const DescriptorSetLayout& layout) {
+std::vector<vk::DescriptorSet> DescriptorPool::allocate(const DescriptorSetLayout layout) {
     vk::DescriptorSetLayout vulkanLayout = layout.get();
 
     vk::DescriptorSetAllocateInfo allocInfo(

@@ -5,7 +5,6 @@ struct Vertex {
     vec3 position; float pad0;
     vec3 normal;   float pad1;
     vec2 uv;       vec2 pad2;
-    vec3 tangent; float pad3;
 };
 
 struct GPUCameraData {
@@ -16,9 +15,8 @@ struct GPUCameraData {
 };
 
 struct CombinedPayload {
-    vec3 primaryColor;
-    float shadow;
-    vec3 reflectionColor;
+    vec3 color;
+    bool isShadowed;
     int depth;
 };
 
@@ -55,16 +53,6 @@ struct ObjectInfo {
     vec2 pad2_;
 };
 
-struct HitInfo {
-    vec3 hitPoint; float pad0_;
-    vec3 normal;   float pad1_; // doubles as color if it's a light
-    vec2 uv;       vec2 pad2_;
-    uint objectInfoIndex;
-    uint hitLight;          // 0 IS FALSE, 1 IS TRUE
-    uint missed; uint pad3_;
-
-};
-
 struct LightInfo {
     vec3 color;
     float intensity;
@@ -77,21 +65,20 @@ struct LightInfo {
 };
 
 
-struct RayPayload {
-    vec3 primaryColor;
-    vec3 reflectionColor;
-    int depth;
+struct HitInfo {
+    vec3 hitPoint;
+    vec3 normal;
+    vec3 color;
+    float roughness;
+    float metallic;
+
+    bool hitLight;
+    bool missed;
 };
 
 
 struct ShadowRayPayload {
     bool isShadowed;
-};
-
-struct HitState {
-    vec3 pos;
-    vec3 nrm;
-    vec2 uv;
 };
 
 #endif

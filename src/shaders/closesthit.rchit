@@ -5,10 +5,26 @@
 #extension GL_GOOGLE_include_directive : enable
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 #extension GL_EXT_buffer_reference2 : require
-
 #include "raycommon.glsl"
+#include "cook-torrance.glsl"
 
 hitAttributeEXT vec2 attribs;
+
+layout(location = 0) rayPayloadInEXT HitInfo payload;
+
+layout(set = 1, binding = 2) readonly buffer VertexBuffer {
+    Vertex vertices[];
+};
+layout(set = 1, binding = 3) readonly buffer IndexBuffer {
+    uint indices[];
+};
+layout(set = 1, binding = 4) uniform sampler2D texSamplers[];
+layout(set = 1, binding = 5) readonly buffer ObjectInfoBuffer {
+    ObjectInfo objectInfos[];
+};
+layout(set = 1, binding = 6) readonly buffer LightInfoBuffer {
+    LightInfo lightInfos[];
+};
 
 layout( push_constant ) uniform constants
 {
@@ -20,32 +36,17 @@ layout( push_constant ) uniform constants
 	float padding_;
 } sceneData;
 
-layout(location = 0) rayPayloadInEXT HitInfo payload;
-
-layout(set = 0, binding = 3) readonly buffer VertexBuffer {
-    Vertex vertices[];
-};
-layout(set = 0, binding = 4) readonly buffer IndexBuffer {
-    uint indices[];
-};
-layout(set = 0, binding = 5) uniform sampler2D texSamplers[];
-layout(set = 0, binding = 6) readonly buffer ObjectInfoBuffer {
-    ObjectInfo objectInfos[];
-};
-layout(set = 0, binding = 7) readonly buffer LightInfoBuffer {
-    LightInfo lightInfos[];
-};
 
 void main() {
     if (gl_InstanceCustomIndexEXT < sceneData.numLights) {  // If this is a light
-        payload.hitLight = 1;
-        payload.normal = lightInfos[gl_InstanceCustomIndexEXT].color;
+        payload.hitLight =  true;
+        payload.color = lightInfos[gl_InstanceCustomIndexEXT].color;
         return;
     }
+    payload.hitLight = false;
 
-    // Get info at hit point
-    uint objInfoIndex = gl_InstanceCustomIndexEXT - sceneData.numLights;
-    ObjectInfo objectInfo = objectInfos[objInfoIndex];
+    uint objIndex = gl_InstanceCustomIndexEXT - sceneData.numLights;
+    ObjectInfo objectInfo = objectInfos[objIndex];
 
     uint vertexOffset = objectInfo.vertexOffset;
     uint indexOffset = objectInfo.indexOffset;
@@ -63,20 +64,37 @@ void main() {
     vec3 v2position = v2.position;
 
     vec3 bary = vec3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
-    vec2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
-
     vec3 localPos = v0position * bary.x + v1position * bary.y + v2position * bary.z;
     vec3 hitPoint = vec3(gl_ObjectToWorldEXT * vec4(localPos, 1.0));
-
     vec3 interpolatedLocalNormal = normalize(v0.normal * bary.x + v1.normal * bary.y + v2.normal * bary.z);
     mat3 normalMatrix = transpose(inverse(mat3(gl_ObjectToWorldEXT)));
     vec3 hitNormal = normalize(normalMatrix * interpolatedLocalNormal);
+    vec2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
 
-    // Fill payload
-    payload.hitPoint = hitPoint;
-    payload.normal = hitNormal;
-    payload.uv = uv;
-    payload.objectInfoIndex = objInfoIndex;
-    payload.hitLight = 0;
+    float roughness = 0.0;
+    float metallic = 0.0;
+    vec3 surfaceColor = vec3(0.0);
 
+    if (objectInfo.usesColorMap != 0) {
+        payload.color = texture(nonuniformEXT(texSamplers[objectInfo.colorIndex]), uv).rgb;
+    } else {
+        payload.color = objectInfo.color;
+    }
+
+    if (objectInfo.usesSpecularMap != 0) {
+        payload.roughness = texture(nonuniformEXT(texSamplers[objectInfo.specularIndex]), uv).r;
+    } else {
+        payload.roughness = objectInfo.specular;
+    }
+
+    if (objectInfo.usesMetallicMap != 0) {
+        payload.metallic = texture(nonuniformEXT(texSamplers[objectInfo.metallicIndex]), uv).r;
+    } else {
+        payload.metallic = objectInfo.metallic;
+    }
+
+   payload.normal = hitNormal;
+   payload.hitPoint = hitPoint;
+
+   return;
 }

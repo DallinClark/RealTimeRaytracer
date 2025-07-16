@@ -23,6 +23,7 @@ import vulkan.memory.descriptor_pool;
 import vulkan.memory.descriptor_set_layout;
 import vulkan.memory.buffer;
 import vulkan.ray_tracing_pipeline;
+import vulkan.compute_pipeline;
 import vulkan.memory.image;
 import vulkan.raytracing.blas;
 import vulkan.raytracing.tlas;
@@ -100,17 +101,37 @@ export namespace app {
 
             vk::Extent3D extent = { swapchain_->extent().width, swapchain_->extent().height, 1 };
 
-            vulkan::memory::Image outputImage(device_->get(), device_->physical(), extent,
+            // Create the images that get rendered too
+            std::vector<vk::DescriptorImageInfo> renderImages= {};
+            vulkan::memory::Image analyticImage(device_->get(), device_->physical(), extent,
                                               vk::Format::eR8G8B8A8Unorm, vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc, vk::ImageAspectFlagBits::eColor);
 
+            vulkan::memory::Image shadowedSampleImage(device_->get(), device_->physical(), extent,
+                                                vk::Format::eR8G8B8A8Unorm, vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc, vk::ImageAspectFlagBits::eColor);
+
+            vulkan::memory::Image unshadowedSampleImage(device_->get(), device_->physical(), extent,
+                                                vk::Format::eR8G8B8A8Unorm, vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc, vk::ImageAspectFlagBits::eColor);
+
+            vulkan::memory::Image denoisedShadowedImage(device_->get(), device_->physical(), extent,
+                                                    vk::Format::eR8G8B8A8Unorm, vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc, vk::ImageAspectFlagBits::eColor);
+
+            vulkan::memory::Image denoisedUnshadowedImage(device_->get(), device_->physical(), extent,
+                                                      vk::Format::eR8G8B8A8Unorm, vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc, vk::ImageAspectFlagBits::eColor);
+
+            vulkan::memory::Image finalImage(device_->get(), device_->physical(), extent,
+                                                        vk::Format::eR8G8B8A8Unorm, vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc, vk::ImageAspectFlagBits::eColor);
+
             auto cmdImage = commandPool.getSingleUseBuffer();
-            vulkan::memory::Image::setImageLayout(*cmdImage, outputImage.getImage(), vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral);
+            for (vulkan::memory::Image* image : { &analyticImage, &shadowedSampleImage, &unshadowedSampleImage, &denoisedShadowedImage, &denoisedUnshadowedImage, &finalImage }) {
+                vulkan::memory::Image::setImageLayout(*cmdImage, image->getImage(), vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral);
+                renderImages.push_back(image->getImageInfo());
+            }
             commandPool.submitSingleUse(std::move(cmdImage), device_->computeQueue());
             device_->get().waitIdle();
 
             vk::Buffer cameraBuffer = camera_->getBuffer();
-            // Create the objects in the scene
 
+            // Create the objects in the scene
             std::vector<scene::Object> objects = {};
             scene::Object ground("../../assets/objects/basic_geo/cube.obj");
             ground.setSpecular(0.2);
@@ -135,7 +156,7 @@ export namespace app {
 
             std::vector<scene::AreaLight> lights = {};
             // takes in intensity and color
-            scene::AreaLight light1(4.0, glm::vec3(1.0)); // sun
+            scene::AreaLight light1(6.0, glm::vec3(1.0));
             light1.scale(glm::vec3(5.0,5.0,3.0));
             light1.move(glm::vec3(2.0,3.0,0.0));
             light1.rotate(glm::vec3(0.0,90.0,0.0));
@@ -186,50 +207,65 @@ export namespace app {
                                                                                                      vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress
                                                                                                      | vk::BufferUsageFlagBits::eTransferDst, lightInfoDataRegions);
 
-            /* JUST FOR TESTING */
-            // FOR NOW JUST ONE DESCRIPTOR SET
-            vulkan::memory::DescriptorSetLayout layout(device_->get());
-            // Create the camera
+            // Create two descriptor sets, one used in only the raytracing pipeline
+            // and one that is also accessed in the compute pipeline
+            vulkan::memory::DescriptorSetLayout rayAndComputeLayout(device_->get());
+            vulkan::memory::DescriptorSetLayout rayTraceOnlyLayout(device_->get());
 
-            layout.addBinding(0, vk::DescriptorType::eStorageImage,  vk::ShaderStageFlagBits::eRaygenKHR); // render image
-            layout.addBinding(1, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR);  // TLAS
-            layout.addBinding(2, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR);  // camera
-            layout.addBinding(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR); // vertex buffer
-            layout.addBinding(4, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR); // index buffer
-            layout.addBinding(5, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR, static_cast<uint32_t>(descriptorTextures.size())); // textures
-            layout.addBinding(6, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR); //object infos
-            layout.addBinding(7, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR); // light infos
-            layout.addBinding(8, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eMissKHR); // hdri
+            std::vector<std::vector<vk::DescriptorPoolSize>> poolGroups = {};
 
-            layout.build();
+            // add images used for rendering to the ray and compute layout
+            // TODO fix this becuase not all are used in the RayGen/Compute
+            for (int i = 0; i < renderImages.size(); ++i) {
+                rayAndComputeLayout.addBinding(i, vk::DescriptorType::eStorageImage,  vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eCompute);
+            }
+            rayAndComputeLayout.build();
+            std::vector<vk::DescriptorPoolSize> rayAndComputePoolSizes = rayAndComputeLayout.getPoolSizes();
 
-            // We need this to happen automatically based off of needs
-            std::vector<vk::DescriptorPoolSize> poolSizes = {
-                    {vk::DescriptorType::eStorageImage, 1},
-                    {vk::DescriptorType::eStorageBuffer, 4},
-                    {vk::DescriptorType::eUniformBuffer, 1},
-                    {vk::DescriptorType::eAccelerationStructureKHR, 1},
-                    {vk::DescriptorType::eCombinedImageSampler, static_cast<uint32_t>(descriptorTextures.size()) + 1}
-            };
+            // add everything needed for the ray tracing layout
+            rayTraceOnlyLayout.addBinding(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR);  // TLAS
+            rayTraceOnlyLayout.addBinding(1, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR);  // camera
+            rayTraceOnlyLayout.addBinding(2, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR); // vertex buffer
+            rayTraceOnlyLayout.addBinding(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR); // index buffer
+            rayTraceOnlyLayout.addBinding(4, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR, static_cast<uint32_t>(descriptorTextures.size())); // textures
+            rayTraceOnlyLayout.addBinding(5, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR); //object infos
+            rayTraceOnlyLayout.addBinding(6, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR); // light infos
+            rayTraceOnlyLayout.addBinding(7, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eMissKHR); // hdri
+            rayTraceOnlyLayout.build();
+            poolGroups.push_back(rayTraceOnlyLayout.getPoolSizes());
 
-            vulkan::memory::DescriptorPool pool(device_->get(), poolSizes, 3);
-            vk::DescriptorSet set = pool.allocate(layout)[0];
 
-            pool.writeImage(set, 0, outputImage.getImageInfo(), vk::DescriptorType::eStorageImage);
-            pool.writeAccelerationStructure(set, 1, vk::DescriptorType::eAccelerationStructureKHR, tlas->get());
-            pool.writeBuffer(set, 2, cameraBuffer, sizeof(scene::Camera::GPUCameraData), vk::DescriptorType::eUniformBuffer, 0);
-            pool.writeBuffer(set, 3, vertexBuffer.get(), sizeof(scene::geometry::Vertex) * vertices.size() , vk::DescriptorType::eStorageBuffer, 0);
-            pool.writeBuffer(set, 4, indexBuffer.get(), indices.size() * sizeof(uint32_t), vk::DescriptorType::eStorageBuffer, 0);
-            pool.writeImages(set, 5, descriptorTextures, vk::DescriptorType::eCombinedImageSampler);
-            pool.writeBuffer(set, 6, objectInfoBuffer.get(), objectInfosSize, vk::DescriptorType::eStorageBuffer, 0);
-            pool.writeBuffer(set, 7, lightInfoBuffer.get(), lightInfosSize, vk::DescriptorType::eStorageBuffer, 0);
-            pool.writeImage(set, 8, hdriImage->getImageInfoWithSampler(hdriSampler.get()), vk::DescriptorType::eCombinedImageSampler);
+            std::vector<vk::DescriptorPoolSize> poolSizesCombined = vulkan::memory::DescriptorSetLayout::combinePoolSizes(poolGroups);
 
-            std::vector<vk::DescriptorSetLayout> descriptorLayouts{layout.get()};
+            vulkan::memory::DescriptorPool pool(device_->get(), poolSizesCombined, 2);
 
-            auto raytracePipeline = vulkan::RayTracingPipeline(*device_, descriptorLayouts, "shaders/spv/raygen.rgen.spv",
+            std::vector<vulkan::memory::DescriptorSetLayout*> layouts = {&rayAndComputeLayout, &rayTraceOnlyLayout};
+            std::vector<vk::DescriptorSet> sets = pool.allocate(layouts);
+            vk::DescriptorSet rayAndComputeSet = sets[0];
+            vk::DescriptorSet rayTraceSet      = sets[1];
+
+            for (int i = 0; i < renderImages.size(); ++i) {
+                pool.writeImage(rayAndComputeSet, i, renderImages[i], vk::DescriptorType::eStorageImage);
+            }
+
+            pool.writeAccelerationStructure(rayTraceSet, 0, vk::DescriptorType::eAccelerationStructureKHR, tlas->get());
+            pool.writeBuffer(rayTraceSet, 1, cameraBuffer, sizeof(scene::Camera::GPUCameraData), vk::DescriptorType::eUniformBuffer, 0);
+            pool.writeBuffer(rayTraceSet, 2, vertexBuffer.get(), sizeof(scene::geometry::Vertex) * vertices.size() , vk::DescriptorType::eStorageBuffer, 0);
+            pool.writeBuffer(rayTraceSet, 3, indexBuffer.get(), indices.size() * sizeof(uint32_t), vk::DescriptorType::eStorageBuffer, 0);
+            pool.writeImages(rayTraceSet, 4, descriptorTextures, vk::DescriptorType::eCombinedImageSampler);
+            pool.writeBuffer(rayTraceSet, 5, objectInfoBuffer.get(), objectInfosSize, vk::DescriptorType::eStorageBuffer, 0);
+            pool.writeBuffer(rayTraceSet, 6, lightInfoBuffer.get(), lightInfosSize, vk::DescriptorType::eStorageBuffer, 0);
+            pool.writeImage(rayTraceSet, 7, hdriImage->getImageInfoWithSampler(hdriSampler.get()), vk::DescriptorType::eCombinedImageSampler);
+
+            std::vector<vk::DescriptorSetLayout> raytraceLayouts{rayAndComputeLayout.get(), rayTraceOnlyLayout.get()};
+
+            auto raytracePipeline = vulkan::RayTracingPipeline(*device_, raytraceLayouts, "shaders/spv/raygen.rgen.spv",
                                                                "shaders/spv/miss.rmiss.spv", "shaders/spv/shadowMiss.rmiss.spv",
                                                                "shaders/spv/closesthit.rchit.spv");
+
+            std::vector<vk::DescriptorSetLayout> computeLayouts{rayAndComputeLayout.get()};
+            auto denoisePipeline = vulkan::ComputePipeline(*device_, computeLayouts, "shaders/spv/denoise.comp.spv");
+            auto combinePipeline = vulkan::ComputePipeline(*device_, computeLayouts, "shaders/spv/combine.comp.spv");
 
             int frame = 0;
             float currentTime = window_->getTime();
@@ -251,13 +287,34 @@ export namespace app {
 
                 auto cmd = commandPool.getSingleUseBuffer();
                 cmd->bindPipeline(vk::PipelineBindPoint::eRayTracingKHR, raytracePipeline.get());
-                cmd->bindDescriptorSets(vk::PipelineBindPoint::eRayTracingKHR, raytracePipeline.getLayout(), 0, set, nullptr);
+                cmd->bindDescriptorSets(vk::PipelineBindPoint::eRayTracingKHR, raytracePipeline.getLayout(), 0, rayAndComputeSet, nullptr);
+                cmd->bindDescriptorSets(vk::PipelineBindPoint::eRayTracingKHR, raytracePipeline.getLayout(), 1,      rayTraceSet, nullptr);
                 sceneData.frame = frame;
                 sceneData.camPosition = camera_->getPosition();
                 cmd->pushConstants<scene::SceneInfo>(raytracePipeline.getLayout(),vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR, 0, sceneData);
                 raytracePipeline.recordTraceRays(*cmd, extent);
 
-                vk::Image srcImage = outputImage.getImage();
+                // Denoise the sampled images
+                int computeImageIndex = 0;
+                cmd->bindPipeline(vk::PipelineBindPoint::eCompute, denoisePipeline.get());
+                cmd->bindDescriptorSets(vk::PipelineBindPoint::eCompute, denoisePipeline.getLayout(), 0, rayAndComputeSet, nullptr);
+                cmd->pushConstants(denoisePipeline.getLayout(), vk::ShaderStageFlagBits::eCompute, 0, sizeof(int), &computeImageIndex);
+
+                // Tell the compute shader how many different work groups to run, 8 wide is set in the shader
+                uint32_t groupCountX = (extent.width  + 7) / 8;
+                uint32_t groupCountY = (extent.height + 7) / 8;
+                cmd->dispatch(groupCountX, groupCountY, 1);
+
+                computeImageIndex = 1;
+                cmd->pushConstants(denoisePipeline.getLayout(), vk::ShaderStageFlagBits::eCompute, 0, sizeof(int), &computeImageIndex);
+                cmd->dispatch(groupCountX, groupCountY, 1);
+
+                // Finally, combine the images
+                cmd->bindPipeline(vk::PipelineBindPoint::eCompute, combinePipeline.get());
+                cmd->bindDescriptorSets(vk::PipelineBindPoint::eCompute, combinePipeline.getLayout(), 0, rayAndComputeSet, nullptr);
+                cmd->dispatch(groupCountX, groupCountY, 1);
+
+                vk::Image srcImage = finalImage.getImage();
                 vk::Image dstImage = swapchain_->getImage(imageIndex);
                 vulkan::memory::Image::setImageLayout(*cmd, srcImage, vk::ImageLayout::eGeneral, vk::ImageLayout::eTransferSrcOptimal);
                 vulkan::memory::Image::setImageLayout(*cmd, dstImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
@@ -278,6 +335,7 @@ export namespace app {
                 if (result != vk::Result::eSuccess) {
                     throw std::runtime_error("failed to present.");
                 }
+                // Wait Idle is slow
                 device_->presentQueue().waitIdle();
                 ++frame;
             }

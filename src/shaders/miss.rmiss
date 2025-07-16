@@ -7,5 +7,5 @@
 layout(location = 0) rayPayloadInEXT HitInfo payload;
 
 void main() {
-    payload.missed = 1;
+    payload.missed = true;
 }
