@@ -22,9 +22,8 @@ void main() {
 
     if (imageIndex == 0) {
         ivec2 dims = imageSize(shadowedSampledImage);
-        // Larger kernel 7x7
-        for (int dy = -3; dy <= 3; ++dy) {
-            for (int dx = -3; dx <= 3; ++dx) {
+        for (int dy = -1; dy <= 1; ++dy) {
+            for (int dx = -1; dx <= 1; ++dx) {
                 ivec2 offset = coord + ivec2(dx, dy);
                 if (offset.x >= 0 && offset.x < dims.x && offset.y >= 0 && offset.y < dims.y) {
                     sum += imageLoad(shadowedSampledImage, offset);
@@ -35,9 +34,8 @@ void main() {
         imageStore(denoisedShadowedImage, coord, sum / float(count));
     } else {
         ivec2 dims = imageSize(unshadowedSampledImage);
-        // Larger kernel 7x7
-        for (int dy = -3; dy <= 3; ++dy) {
-            for (int dx = -3; dx <= 3; ++dx) {
+        for (int dy = -1; dy <= 1; ++dy) {
+            for (int dx = -1; dx <= 1; ++dx) {
                 ivec2 offset = coord + ivec2(dx, dy);
                 if (offset.x >= 0 && offset.x < dims.x && offset.y >= 0 && offset.y < dims.y) {
                     sum += imageLoad(unshadowedSampledImage, offset);
