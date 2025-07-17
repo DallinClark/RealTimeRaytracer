@@ -58,7 +58,7 @@ struct LightInfo {
     float intensity;
 
     uint vertexOffset;
-    uint isTwoSided;
+    bool isTwoSided;
     vec2 pad;
 
     mat4 transform;

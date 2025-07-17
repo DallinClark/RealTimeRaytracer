@@ -133,215 +133,58 @@ export namespace app {
 
             // Create the objects in the scene
             std::vector<scene::Object> objects = {};
-            scene::Object floor("../../assets/objects/room/floor.obj");
-            floor.setSpecular(0.8);
-            floor.setColor("../../assets/textures/room/Tiles.jpg");
-            objects.push_back(floor);
+            scene::Object ground("../../assets/objects/basic_geo/cube.obj");
+            ground.setSpecular(1.0);
+            ground.setColor("../../assets/textures/basic/concrete2.jpg");
+            ground.scale(4.0);
+            ground.move(glm::vec3(0,-17.5,0));
+            objects.push_back(ground);
 
-            scene::Object walls("../../assets/objects/room/room.obj");
-            walls.setSpecular(0.8);
-            walls.setColor(glm::vec3(0.7));
-            objects.push_back(walls);
+            scene::Object sphere("../../assets/objects/basic_geo/sphere.obj");
+            sphere.setSpecular(0.3);
+            sphere.setColor(glm::vec3(1.0, 0.6, 0.6));
+            sphere.scale(0.6);
+            sphere.move(glm::vec3(-4.5,-2.1,0.20));
+            objects.push_back(sphere);
 
-            scene::Object baseboard("../../assets/objects/room/baseboard.obj");
-            baseboard.setSpecular(0.8);
-            baseboard.setColor(glm::vec3(0.6));
-            objects.push_back(baseboard);
+            scene::Object moon("../../assets/objects/basic_geo/moon.obj");
+            moon.setSpecular(0.8);
+            moon.setColor("../../assets/textures/basic/moon.png");
+            moon.scale(0.015);
+            moon.move(glm::vec3(0.0,-2.3,1.0));
+            objects.push_back(moon);
 
-            scene::Object table_base("../../assets/objects/room/table_base.obj");
-            table_base.setSpecular(0.8);
-            table_base.setColor(glm::vec3(0.9,0.8,0.5));
-            objects.push_back(table_base);
+            scene::Object metalSphere("../../assets/objects/basic_geo/sphere.obj");
+            metalSphere.setSpecular(0.08);
+            metalSphere.setColor(glm::vec3(0.7, 1.0, 0.6));
+            metalSphere.scale(0.5);
+            metalSphere.setMetallic(0.94);
+            metalSphere.move(glm::vec3(4.0,-2.3,-3.3));
+            objects.push_back(metalSphere);
 
-            scene::Object table_top("../../assets/objects/room/table_top.obj");
-            table_top.setSpecular(0.3);
-            table_top.setColor(glm::vec3(0.4));
-            objects.push_back(table_top);
+//            scene::Object sphere2("../../assets/objects/basic_geo/sphere.obj");
+//            sphere2.setSpecular(0.1);
+//            sphere2.setColor(glm::vec3(0.7));
+//            sphere2.scale(0.5);
+//            sphere2.move(glm::vec3(-3.0,-2.5,1.5));
+//            objects.push_back(sphere2);
 
-            scene::Object picture("../../assets/objects/room/picture.obj");
-            picture.setMetallic(0.0);
-            picture.setSpecular(0.9);
-            picture.setColor("../../assets/textures/room/picture3.jpg");
-            objects.push_back(picture);
-
-            std::vector<glm::vec3> chairTransforms = {
-                    glm::vec3{0.0,0.0,0.0}, //left
-                    glm::vec3{0.0,0.0,0.0},
-                    glm::vec3{ -1, 0.0, 0.8}, // back left
-                    glm::vec3{ 0.0, 83.0, 0.0},
-                    glm::vec3{ -4, 0.0, 0.8},  // back right
-                    glm::vec3{ 0.0, 94.0, 0.0},
-                    glm::vec3{ 2.5, 0.0, -4.0}, // front left
-                    glm::vec3{ 0.0, -92.0, 0.0},
-                    glm::vec3{ -0.6, 0.0, -4.0}, // front right
-                    glm::vec3{ 0.0, -98.0, 0.0},
-                    glm::vec3{ -1.6, 0.0, -4.2}, // right
-                    glm::vec3{ 0.0, 181.0, 0.0}
-            };
-
-            for (int i = 0; i < chairTransforms.size() / 2; ++i) {
-                scene::Object chair_legs("../../assets/objects/room/chair_legs.obj");
-                chair_legs.setMetallic(0.9);
-                chair_legs.setSpecular(0.1);
-                chair_legs.setColor(glm::vec3(0.3));
-                chair_legs.rotate(chairTransforms[i * 2 + 1]);
-                chair_legs.move(chairTransforms[i * 2]);
-                objects.push_back(chair_legs);
-
-                scene::Object chair_seat("../../assets/objects/room/chair_seat.obj");
-                chair_seat.setMetallic(0.0);
-                chair_seat.setSpecular(0.3);
-                chair_seat.setColor(glm::vec3(0.4,0.4,0.5));
-                chair_seat.rotate(chairTransforms[i * 2 + 1]);
-                chair_seat.move(chairTransforms[i * 2]);
-                objects.push_back(chair_seat);
-            }
-
-            scene::Object dishes("../../assets/objects/room/dishes.obj");
-            dishes.setMetallic(0.0);
-            dishes.setSpecular(0.17);
-            dishes.setColor(glm::vec3(0.3));
-            objects.push_back(dishes);
-
-            scene::Object lightOne("../../assets/objects/room/light.obj");
-            lightOne.setMetallic(0.0);
-            lightOne.setSpecular(0.8);
-            lightOne.setColor(glm::vec3(0.4));
-            objects.push_back(lightOne);
-
-            scene::Object lightTwo("../../assets/objects/room/light.obj");
-            lightTwo.setMetallic(0.0);
-            lightTwo.setSpecular(0.8);
-            lightTwo.setColor(glm::vec3(0.4));
-            lightTwo.rotate(glm::vec3(0,90,0));
-            lightTwo.move(glm::vec3(-1.0,0.0,0.3));
-            objects.push_back(lightTwo);
-
-            scene::Object spoon1("../../assets/objects/room/spoon.obj");
-            spoon1.setMetallic(1.0);
-            spoon1.setSpecular(0.1);
-            spoon1.setColor(glm::vec3(0.3));
-            objects.push_back(spoon1);
-
-            scene::Object plate1("../../assets/objects/room/cup_plate.obj");
-            plate1.setMetallic(0.0);
-            plate1.setSpecular(0.2);
-            plate1.setColor(glm::vec3(0.85));
-            objects.push_back(plate1);
-
-            scene::Object trim1("../../assets/objects/room/trim.obj");
-            trim1.setMetallic(1.0);
-            trim1.setSpecular(0.2);
-            trim1.setColor(glm::vec3(1.0, 0.95,0.0));
-            objects.push_back(trim1);
-
-            scene::Object spoon2("../../assets/objects/room/spoon.obj");
-            spoon2.setMetallic(1.0);
-            spoon2.setSpecular(0.1);
-            spoon2.setColor(glm::vec3(0.3));
-            spoon2.rotate(glm::vec3(0.0,70.0,0.0));
-            spoon2.move(glm::vec3(0.0,0.0,1.0));
-            objects.push_back(spoon2);
-
-            scene::Object plate2("../../assets/objects/room/cup_plate.obj");
-            plate2.setMetallic(0.0);
-            plate2.setSpecular(0.2);
-            plate2.setColor(glm::vec3(0.85));
-            plate2.rotate(glm::vec3(0.0,70.0,0.0));
-            plate2.move(glm::vec3(0.0,0.0,1.0));
-            objects.push_back(plate2);
-
-            scene::Object trim2("../../assets/objects/room/trim.obj");
-            trim2.setMetallic(1.0);
-            trim2.setSpecular(0.2);
-            trim2.setColor(glm::vec3(1.0, 0.95,0.0));
-            trim2.rotate(glm::vec3(0.0,70.0,0.0));
-            trim2.move(glm::vec3(0.0,0.0,1.0));
-            objects.push_back(trim2);
-
-            scene::Object spoon3("../../assets/objects/room/spoon.obj");
-            spoon3.setMetallic(1.0);
-            spoon3.setSpecular(0.1);
-            spoon3.setColor(glm::vec3(0.3));
-            spoon3.rotate(glm::vec3(0.0,-70.0,0.0));
-            spoon3.move(glm::vec3(2.7,0.0,-3.2));
-            objects.push_back(spoon3);
-
-            scene::Object plate3("../../assets/objects/room/cup_plate.obj");
-            plate3.setMetallic(0.0);
-            plate3.setSpecular(0.2);
-            plate3.setColor(glm::vec3(0.85));
-            plate3.rotate(glm::vec3(0.0,-70.0,0.0));
-            plate3.move(glm::vec3(2.7,0.0,-3.2));
-            objects.push_back(plate3);
-
-            scene::Object trim3("../../assets/objects/room/trim.obj");
-            trim3.setMetallic(1.0);
-            trim3.setSpecular(0.2);
-            trim3.setColor(glm::vec3(1.0, 0.95,0.0));
-            trim3.rotate(glm::vec3(0.0,-70.0,0.0));
-            trim3.move(glm::vec3(2.7,0.0,-3.2));
-            objects.push_back(trim3);
-
-
-//            std::vector<scene::Object> objects = {};
-//            scene::Object floor("../../assets/objects/basic_geo/cube.obj");
-//            floor.setSpecular(0.8);
-//            floor.setColor(glm::vec3(0.3));
-//            floor.scale(3.0);
-//            floor.move(glm::vec3(0.0,-11.165,0.0));
-//            objects.push_back(floor);
-//
-//            scene::Object toyCar("../../assets/objects/toycar/toycar.obj");
-//            toyCar.setSpecular(0.05);
-//            toyCar.setMetallic(0.0);
-//            toyCar.setColor("../../assets/textures/toycar/toycar_color.png");
-//            toyCar.scale(50.0);
-//            objects.push_back(toyCar);
-//
-//            scene::Object carStand("../../assets/objects/toycar/car_stand.obj");
-//            carStand.setSpecular(0.8);
-//            carStand.setMetallic(0.0);
-//            carStand.setColor("../../assets/textures/toycar/car_stand_color.png");
-//            carStand.scale(50.0);
-//            objects.push_back(carStand);
-
-            // Create the area lights in the scene, they start at the origin, facing down the z axis, with side lengths of 1
             std::vector<scene::AreaLight> lights = {};
-            // takes in intensity and color
-            scene::AreaLight light1(55.0, glm::vec3(1.0,0.94,0.6)); // sun
-            light1.scale(glm::vec3(8.0,8.0,8.0));
-            light1.move(glm::vec3(15.0,13.0,0.0));
-            light1.rotate(glm::vec3(-15.0,00.0,0.0));
+            // takes in intensity and color   //payload.roughness = ToLinear(payload.roughness);
+
+            scene::AreaLight light1(4.0, glm::vec3(1.0), false);
+            light1.scale(glm::vec3(4.0,2.0,1.0));
+            light1.move(glm::vec3(9.0,-2.0,0.0));
             light1.rotate(glm::vec3(0.0,90.0,0.0));
+            light1.rotate(glm::vec3(0.0,0.0,165.0));
             lights.push_back(light1);
 
-//            scene::AreaLight light2(75.0, glm::vec3(1.0,0.97,0.8)); // top light 1
-//            light2.scale(glm::vec3(0.7,0.7,0.7));
-//            light2.move(glm::vec3(0.9,3.62,-1.9));
-//            light2.rotate(glm::vec3(90.0,0.0,0.0));
-//            light2.rotate(glm::vec3(0.0,0.0,-2.0));
-//            lights.push_back(light2);
-//
-//            scene::AreaLight light3(75.0, glm::vec3(1.0,0.97,0.8)); // top light 2
-//            light3.scale(glm::vec3(0.7,0.7,0.7));
-//            light3.move(glm::vec3(-2.2,3.62,-1.9));
-//            light3.rotate(glm::vec3(90.0,0.0,0.0));
-//            light3.rotate(glm::vec3(0.0,0.0,5.0));
-//            lights.push_back(light3);
-//
-            scene::AreaLight light4(0.5, glm::vec3(0.5,0.8,1.0)); // fill light 1
-            light4.scale(glm::vec3(2.0,1.0,1.0));
-            light4.move(glm::vec3(3.0,1.0,7.0));
-            light4.rotate(glm::vec3(20.0,0.0,0.0));
-            lights.push_back(light4);
-
-//            scene::AreaLight light5(0.5, glm::vec3(0.5,0.8,1.0)); // fill light 2
-//            light5.scale(glm::vec3(6.0,3.0,3.0));
-//            light5.move(glm::vec3(-5.0,4.0,7.0));
-//            light5.rotate(glm::vec3(20.0,0.0,0.0));
-//            light5.rotate(glm::vec3(20.0,30.0,0.0));
-//            lights.push_back(light5);
+            scene::AreaLight light2(4.0, glm::vec3(1.0,1.0, 0.5), false);
+            light2.scale(glm::vec3(4.0,2.0,1.0));
+            light2.move(glm::vec3(-11.0,-2.0,0.0));
+            light2.rotate(glm::vec3(0.0,90.0,0.0));
+            light2.rotate(glm::vec3(0.0,0.0,15.0));
+            lights.push_back(light2);
 
 
             auto sceneInfo = std::move(app::setup::CreateScene::createSceneFromObjectsAndLights(*device_, commandPool, objects, lights));

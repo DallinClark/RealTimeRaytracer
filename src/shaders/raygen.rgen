@@ -236,7 +236,7 @@ void main() {
            shadowedSample   /= float(numShadowSamples);
            unshadowedSample /= float(numShadowSamples);
 
-           bool twoSided = true;
+           bool twoSided = currLight.isTwoSided;
 
            diffuse = LTC_Evaluate(N, V, P, mat3(1), translatedPoints, twoSided);
            specular = LTC_Evaluate(N, V, P, Minv, translatedPoints, twoSided);
@@ -244,7 +244,7 @@ void main() {
            vec3 fresnel = mSpecular * t2.x + (vec3(1.0) - mSpecular) * t2.y;
            specular *= fresnel;
 
-           analyticColor += currLight.color * currLight.intensity * (specular + mDiffuse * diffuse);
+           analyticColor += currLight.color * currLight.intensity * (specular + mDiffuse * diffuse) * 4.0;
            shadowedSampledColor += shadowedSample;
            unshadowedSampledColor += unshadowedSample;
        }

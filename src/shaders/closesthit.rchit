@@ -35,7 +35,12 @@ layout( push_constant ) uniform constants
 	vec3 camPosition;
 	float padding_;
 } sceneData;
-
+vec3 PowVec3(vec3 v, float p)
+{
+    return vec3(pow(v.x, p), pow(v.y, p), pow(v.z, p));
+}
+vec3 ToLinear(vec3 v) { return PowVec3(v, 2.2); }
+float ToLinear(float v) { return pow(v, 2.2); }
 
 void main() {
     if (gl_InstanceCustomIndexEXT < sceneData.numLights) {  // If this is a light
@@ -71,10 +76,6 @@ void main() {
     vec3 hitNormal = normalize(normalMatrix * interpolatedLocalNormal);
     vec2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
 
-    float roughness = 0.0;
-    float metallic = 0.0;
-    vec3 surfaceColor = vec3(0.0);
-
     if (objectInfo.usesColorMap != 0) {
         payload.color = texture(nonuniformEXT(texSamplers[objectInfo.colorIndex]), uv).rgb;
     } else {
@@ -93,6 +94,8 @@ void main() {
         payload.metallic = objectInfo.metallic;
     }
 
+   payload.color = ToLinear(payload.color);
+   //payload.roughness = ToLinear(payload.roughness);
    payload.normal = hitNormal;
    payload.hitPoint = hitPoint;
 
