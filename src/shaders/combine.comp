@@ -1,0 +1,51 @@
+#version 460
+#extension GL_EXT_shader_explicit_arithmetic_types_float32 : require
+#extension GL_EXT_nonuniform_qualifier : enable
+
+// Work with 8x8 threads at a time in one workgroup
+layout (local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, rgba8) uniform image2D analyticImage;
+layout(set = 0, binding = 3, rgba8) uniform image2D denoisedShadowedImage;
+layout(set = 0, binding = 4, rgba8) uniform image2D denoisedUnshadowedImage;
+layout(set = 0, binding = 5, rgba8) uniform image2D finalImage;
+
+vec3 PowVec3(vec3 v, float p)
+{
+    return vec3(pow(v.x, p), pow(v.y, p), pow(v.z, p));
+}
+vec3 ToSRGB(vec3 v)   { return PowVec3(v, 1.0/2.2); }
+
+vec3 ACESFilm(vec3 x)
+{
+    const float a = 2.51;
+    const float b = 0.03;
+    const float c = 2.43;
+    const float d = 0.59;
+    const float e = 0.14;
+    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+}
+
+void main() {
+    ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
+
+    vec4 analytic = imageLoad(analyticImage, coord);
+    vec4 shadowed = imageLoad(denoisedShadowedImage, coord);
+    vec4 unshadowed = imageLoad(denoisedUnshadowedImage, coord);
+
+    // Avoid divide by zero
+    vec3 ratio = shadowed.rgb / max(unshadowed.rgb, vec3(0.001));
+
+    vec3 finalRGB = analytic.rgb * ratio;
+
+    // Apply exposure control
+    float exposure = 0.8; // tweak to taste
+    finalRGB = vec3(1.0) - exp(-finalRGB * exposure);
+
+    // gamma correction and tonemapping
+    finalRGB = ACESFilm(finalRGB);
+    finalRGB = ToSRGB(finalRGB);
+
+    imageStore(finalImage, coord, vec4(finalRGB, 1.0));
+}
+

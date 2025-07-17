@@ -70,9 +70,9 @@ namespace vulkan {
 
 
     RayTracingPipeline::RayTracingPipeline(const context::Device &device, std::vector<vk::DescriptorSetLayout> &descriptorSetLayouts,
-                                   std::string_view rgenPath, std::string_view rmissPath,
-                                   std::string_view shadowMissPath, std::string_view rchitPath)
-                                   : device_{device}, descriptorSetLayouts_(descriptorSetLayouts) {
+                                           std::string_view rgenPath, std::string_view rmissPath,
+                                           std::string_view shadowMissPath, std::string_view rchitPath)
+            : device_{device}, descriptorSetLayouts_(descriptorSetLayouts) {
 
         createShaderModules(rgenPath, rmissPath, shadowMissPath, rchitPath);
         createShaderGroups();
@@ -127,7 +127,7 @@ namespace vulkan {
         vk::PushConstantRange pushConstant;
         pushConstant.setOffset(0);
         pushConstant.setSize(sizeof(scene::SceneInfo));
-        pushConstant.setStageFlags(vk::ShaderStageFlagBits::eClosestHitKHR);
+        pushConstant.setStageFlags(vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR);
 
         layoutInfo.setPPushConstantRanges(&pushConstant);
         layoutInfo.setPushConstantRangeCount(1);

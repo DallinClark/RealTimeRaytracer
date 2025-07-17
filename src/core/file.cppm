@@ -10,6 +10,7 @@ module;
 #include <unordered_map>
 #include <memory>
 #include <functional>
+#include <iostream>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -109,7 +110,9 @@ export namespace core::file {
         stbi_uc* pixels = stbi_load(texturePath.c_str(), &texWidth, &texHeight, &texChannels, desiredChannels);
 
         if (!pixels) {
-            throw std::runtime_error("failed to load texture image!");
+            std::cerr << "Failed to load image: " << texturePath << "\n";
+            std::cerr << "Reason: " << stbi_failure_reason() << "\n";
+            throw std::runtime_error("Image load failed");
         }
 
         vk::DeviceSize imageSize = texWidth * texHeight * (isGrayscale ? 1 : 4);

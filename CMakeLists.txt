@@ -86,6 +86,12 @@ if (NOT TARGET glm::glm)
 endif()
 
 # ----------------------------------------------------------------------------
+# NRD
+# ----------------------------------------------------------------------------
+set(NRD_ROOT "$ENV{HOME}/tools/nrd")
+add_subdirectory(${NRD_ROOT} ${CMAKE_BINARY_DIR}/nrd_build)
+
+# ----------------------------------------------------------------------------
 # Convert GLSL files to SPIR-V
 # ----------------------------------------------------------------------------
 
@@ -115,6 +121,7 @@ file(GLOB_RECURSE GLSL_SHADERS
         ${SHADER_SRC_DIR}/*.rchit
         ${SHADER_SRC_DIR}/*.rmiss
         ${SHADER_SRC_DIR}/*.rint
+        ${SHADER_SRC_DIR}/*.comp
 )
 
 message(STATUS "Found shaders:")
@@ -171,6 +178,7 @@ add_executable(${PROJECT_NAME}
         src/scene/scene_info.cppm
         src/app/setup/create_scene.cppm
         src/core/utils.cppm
+        src/vulkan/compute_pipeline.cppm
 )
 
 # --- MODULE SUPPORT -----------------------------------------
@@ -204,7 +212,9 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
         glfw
         glm::glm
         tinyobjloader
+        NRD
 )
+target_include_directories(RealTimeRaytracer PRIVATE ${NRD_ROOT}/Include)
 
 target_compile_definitions(RealTimeRaytracer
         PRIVATE

@@ -58,17 +58,22 @@ struct LightInfo {
     float intensity;
 
     uint vertexOffset;
-    uint isTwoSided;
+    bool isTwoSided;
     vec2 pad;
 
     mat4 transform;
 };
 
 
-struct RayPayload {
-    vec3 primaryColor;
-    vec3 reflectionColor;
-    int depth;
+struct HitInfo {
+    vec3 hitPoint;
+    vec3 normal;
+    vec3 color;
+    float roughness;
+    float metallic;
+
+    bool hitLight;
+    bool missed;
 };
 
 
