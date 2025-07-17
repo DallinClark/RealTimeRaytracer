@@ -136,8 +136,8 @@ export namespace app {
             scene::Object ground("../../assets/objects/basic_geo/cube.obj");
             ground.setSpecular(1.0);
             ground.setColor("../../assets/textures/basic/concrete2.jpg");
-            ground.scale(4.0);
-            ground.move(glm::vec3(0,-17.5,0));
+            ground.scale(8.0);
+            ground.move(glm::vec3(0,-31.3,0));
             objects.push_back(ground);
 
             scene::Object sphere("../../assets/objects/basic_geo/sphere.obj");

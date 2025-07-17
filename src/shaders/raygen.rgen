@@ -35,6 +35,23 @@ layout( push_constant ) uniform constants
     float padding_;
 } sceneData;
 
+vec3 PowVec3(vec3 v, float p)
+{
+    return vec3(pow(v.x, p), pow(v.y, p), pow(v.z, p));
+}
+vec3 ToSRGB(vec3 v)   { return PowVec3(v, 1.0/2.2); }
+
+vec3 ACESFilm(vec3 x)
+{
+    const float a = 2.51;
+    const float b = 0.03;
+    const float c = 2.43;
+    const float d = 0.59;
+    const float e = 0.14;
+    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+}
+
+
 
 layout(location = 0) rayPayloadEXT HitInfo payload;
 layout(location = 1) rayPayloadEXT bool isShadowed;
@@ -228,7 +245,7 @@ void main() {
                float attenuation = 1.0 / (distance * distance);
 
                vec3 BRDF = currSpecular + currDiffuse;
-               vec3 L = currLight.color * currLight.intensity * NdotL * attenuation * 30.0;
+               vec3 L = currLight.color * currLight.intensity * NdotL * attenuation * 40.0;
 
                shadowedSample   += currShadow * BRDF * L;
                unshadowedSample += BRDF * L;
@@ -244,7 +261,7 @@ void main() {
            vec3 fresnel = mSpecular * t2.x + (vec3(1.0) - mSpecular) * t2.y;
            specular *= fresnel;
 
-           analyticColor += currLight.color * currLight.intensity * (specular + mDiffuse * diffuse) * 4.0;
+           analyticColor += currLight.color * currLight.intensity * (specular + mDiffuse * diffuse) * 5.0;
            shadowedSampledColor += shadowedSample;
            unshadowedSampledColor += unshadowedSample;
        }
@@ -254,7 +271,16 @@ void main() {
     unshadowedSampledColor /= float(NUM_PRIMARY_RAYS);
     analyticColor /= float(NUM_PRIMARY_RAYS);
 
-    // Analytic image is at 0, shadowedSampled is at 1, and unshadowedSampled is at 2
+    analyticColor = ACESFilm(analyticColor);
+    analyticColor = ToSRGB(analyticColor);
+
+    unshadowedSampledColor = ACESFilm(unshadowedSampledColor);
+    unshadowedSampledColor = ToSRGB(unshadowedSampledColor);
+
+    shadowedSampledColor = ACESFilm(shadowedSampledColor);
+    shadowedSampledColor = ToSRGB(shadowedSampledColor);
+
+
     imageStore(analyticImageOut, pixelCoord, vec4(analyticColor.b, analyticColor.g, analyticColor.r, 1.0));
     imageStore(shadowedSampledImageOut, pixelCoord, vec4(shadowedSampledColor.b, shadowedSampledColor.g, shadowedSampledColor.r, 1.0));
     imageStore(unshadowedSampledImageOut, pixelCoord, vec4(unshadowedSampledColor.b, unshadowedSampledColor.g, unshadowedSampledColor.r, 1.0));

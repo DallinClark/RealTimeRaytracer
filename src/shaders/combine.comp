@@ -6,6 +6,8 @@
 layout (local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 layout(set = 0, binding = 0, rgba8) uniform image2D analyticImage;
+layout(set = 0, binding = 1, rgba8) uniform image2D sampleShadow;
+layout(set = 0, binding = 2, rgba8) uniform image2D sampleUnshadow;
 layout(set = 0, binding = 3, rgba8) uniform image2D denoisedShadowedImage;
 layout(set = 0, binding = 4, rgba8) uniform image2D denoisedUnshadowedImage;
 layout(set = 0, binding = 5, rgba8) uniform image2D finalImage;
@@ -36,15 +38,14 @@ void main() {
     // Avoid divide by zero
     vec3 ratio = shadowed.rgb / max(unshadowed.rgb, vec3(0.001));
 
-    vec3 finalRGB = analytic.rgb * ratio;
+    vec3 finalRGB = analytic.rgb * ratio.rgb;
 
     // Apply exposure control
-    float exposure = 0.8; // tweak to taste
-    finalRGB = vec3(1.0) - exp(-finalRGB * exposure);
+    //float exposure = 0.5; // tweak to taste
+    //finalRGB = vec3(1.0) - exp(-finalRGB * exposure);
 
     // gamma correction and tonemapping
-    finalRGB = ACESFilm(finalRGB);
-    finalRGB = ToSRGB(finalRGB);
+
 
     imageStore(finalImage, coord, vec4(finalRGB, 1.0));
 }
