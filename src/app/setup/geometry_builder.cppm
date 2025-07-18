@@ -56,13 +56,15 @@ export namespace app::setup  {
         };
 
         static GeometryReturnInfo createTLASFromOBJsAndTransforms(const vulkan::context::Device& device, vulkan::context::CommandPool& commandPool,
-                                                                  std::vector<scene::Object>& objects, std::vector<scene::AreaLight>& areaLights);
+                                                                  std::vector<std::shared_ptr<scene::Object>>& objects,
+                                                                  std::vector<std::shared_ptr<scene::AreaLight>>& areaLights);
 
     private:
     };
 
     GeometryBuilder::GeometryReturnInfo GeometryBuilder::createTLASFromOBJsAndTransforms(const vulkan::context::Device& device, vulkan::context::CommandPool& commandPool,
-                                                                                         std::vector<scene::Object>& objects, std::vector<scene::AreaLight>& areaLights) {
+                                                                                         std::vector<std::shared_ptr<scene::Object>>& objects,
+                                                                                         std::vector<std::shared_ptr<scene::AreaLight>>& areaLights) {
 
         std::vector<glm::vec3> vertexPositions{};
         std::vector<uint32_t> indices{};
@@ -72,62 +74,37 @@ export namespace app::setup  {
         vk::DeviceSize currVertexOffset = 0;
         vk::DeviceSize currIndexOffset  = 0;
 
-        // Lights always go first before objects,
-        // all area lights share vertices and indices,
-        // so you can just make one BLAS for now
+        // Lights always go first before objects
         size_t prevVertexCount = vertexPositions.size();
         size_t prevIndexCount  = indices.size();
-
-        for (const glm::vec3& point : areaLights[0].getPoints()) {
-            vertexPositions.push_back(point);
-            vertices.push_back(scene::geometry::Vertex{point});
-        }
-        std::vector<uint32_t> temp = {0, 1, 2, 0, 2, 3}; // EVERY AREA LIGHT IS A RECTANGLE WITH 2 TRIANGLES
-        for (const uint32_t& index : temp) {
-            indices.push_back(static_cast<uint32_t>(index));
-        }
-
-        size_t newVertexCount = vertexPositions.size() - prevVertexCount;
-        size_t newIndexCount  = indices.size() - prevIndexCount;
-
-        BLASCreateInfo meshData{};
-        meshData.vertexOffset  = currVertexOffset;
-        meshData.indexOffset   = currIndexOffset;
-        meshData.vertexCount   = static_cast<uint32_t>(newVertexCount);
-        meshData.indexCount    = static_cast<uint32_t>(newIndexCount);
-        meshData.vertexSize    = newVertexCount * sizeof(glm::vec3);
-        meshData.indexSize     = newIndexCount * sizeof(uint32_t);
-        meshData.vertexIndexOffset = prevVertexCount;
-        meshData.indexIndexOffset  = prevIndexCount;
-
-        currVertexOffset += newVertexCount * sizeof(glm::vec3);
-        currIndexOffset  += newIndexCount * sizeof(uint32_t);
-
-        meshDatas.push_back(meshData);
-
-        for (auto& light : areaLights) {
-            light.setVertexOffset(0); // Every area light uses the first 4 points
-        }
-
 
         std::unordered_map<std::string, int> loadedModels;
 
         // Loads the models for each object
-        for (auto& object : objects) {
-            // check if model has already been loaded
-            std::string modelPath = object.getOBJPath();
+        auto processGeometryObject = [&](auto& instance) {
+            std::string modelPath = instance->getOBJPath();
             auto it = loadedModels.find(modelPath);
 
             if (it != loadedModels.end()) {
-                // Already mapped
-                object.setBLASIndex(it->second);
-                continue;
+                instance->setBLASIndex(it->second);
+                return;
             }
 
             size_t prevVertexCount = vertexPositions.size();
             size_t prevIndexCount  = indices.size();
 
-            core::file::loadModel(modelPath, vertexPositions, indices, vertices);
+            if (modelPath == "square") {
+                for (const glm::vec3& point : instance->getPoints()) {
+                    vertexPositions.push_back(point);
+                    vertices.push_back(scene::geometry::Vertex{point});
+                }
+                std::vector<uint32_t> temp = {0, 1, 2, 0, 2, 3};
+                for (const uint32_t& index : temp) {
+                    indices.push_back(index);
+                }
+            } else {
+                core::file::loadModel(modelPath, vertexPositions, indices, vertices);
+            }
 
             size_t newVertexCount = vertexPositions.size() - prevVertexCount;
             size_t newIndexCount  = indices.size() - prevIndexCount;
@@ -147,8 +124,16 @@ export namespace app::setup  {
 
             meshDatas.push_back(meshData);
 
-            object.setBLASIndex(meshDatas.size() - 1);
+            instance->setBLASIndex(meshDatas.size() - 1);
             loadedModels[modelPath] = meshDatas.size() - 1;
+        };
+
+        for (auto& light : areaLights) {
+            processGeometryObject(light);
+        }
+
+        for (auto& object : objects) {
+            processGeometryObject(object);
         }
 
         // creates the index and vertex buffers

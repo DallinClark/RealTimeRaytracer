@@ -31,6 +31,8 @@ namespace vulkan::raytracing {
 
         const uint32_t getVertexIndexOffset() const { return vertexIndexOffset_; }
         const uint32_t getIndexIndexOffset() const  { return indexIndexOffset_; }
+        const uint32_t getIndexCount() const  { return indexCount_; }
+
 
     private:
         vk::Device device_;
@@ -42,6 +44,8 @@ namespace vulkan::raytracing {
         uint32_t vertexIndexOffset_; // number of vertices before this blas
         uint32_t indexIndexOffset_;  // number of indices before this blas
 
+        uint32_t indexCount_;
+
         vk::UniqueAccelerationStructureKHR accelerationStructure_;
 
     };
@@ -49,7 +53,7 @@ namespace vulkan::raytracing {
     // TODO USE THE MEMORY ADDRESS STUFF IN BUFFER CLASS
     BLAS::BLAS(const context::Device& device, context::CommandPool& commandPool, const vk::DeviceAddress& vertexAddress, const vk::DeviceAddress& indexAddress, uint32_t vertexCount,
                 vk::DeviceSize vertexStride, uint32_t indexCount, vk::IndexType indexType, uint32_t vertexIndexOffset, uint32_t indexIndexOffset)
-                    : device_(device.get()),physicalDevice_(device.physical()), vertexIndexOffset_(vertexIndexOffset),
+                    : device_(device.get()),physicalDevice_(device.physical()), vertexIndexOffset_(vertexIndexOffset), indexCount_(indexCount),
                       indexIndexOffset_(indexIndexOffset){
 
         vk::DeviceOrHostAddressConstKHR vertexAddr{};

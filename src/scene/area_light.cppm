@@ -2,7 +2,9 @@ module;
 
 #include <glm/glm.hpp>
 #include <glm/ext/matrix_transform.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <vulkan/vulkan.hpp>
+#include <string>
 
 export module scene.area_light;
 
@@ -11,23 +13,25 @@ import core.utils;
 namespace scene {
     // Holds info for an area light
     // Light starts at the origin facing down the z axis, with side lengths of 1
+    // TODO make this and object children of a BLASObject class or something
 
     export class AreaLight {
     public:
-        AreaLight(float intensity, glm::vec3 color, bool isTwoSided = true)
-                : intensity_(intensity), color_(color), isTwoSided_(isTwoSided) {};
+        AreaLight(float intensity, glm::vec3 color, bool isTwoSided = false, const std::string& objPath = "square")
+                : intensity_(intensity), color_(color), isTwoSided_(isTwoSided), objPath_(objPath) {};
 
         struct alignas(16) GPUAreaLightInfo {
             glm::vec3 color;
             float intensity;
 
-            uint32_t vertexOffset; // No index offset needed becuase all area lights have 4 points
+            uint32_t vertexOffset;
+            uint32_t indexOffset;
+            uint32_t numTriangles;
             uint32_t isTwoSided;
-            glm::vec2 pad = glm::vec2(0.0);
 
             glm::mat4 transform;
         };
-
+        std::string getOBJPath() { return objPath_; }
 
         void move(const glm::vec3& move);
         void scale(glm::vec3 scale);
@@ -36,27 +40,43 @@ namespace scene {
         const std::vector<glm::vec3>& getPoints() { return points_; };
 
         void setVertexOffset(uint32_t newOffset) { vertexOffset_ = newOffset; };
+        void setIndexOffset(uint32_t newOffset) { indexOffset_ = newOffset; };
 
         vk::TransformMatrixKHR getTransform() { return transform_; };
 
         GPUAreaLightInfo getGPUInfo();
+
+        void setBLASIndex(uint32_t index) { blasIndex_ = index; }
+        uint32_t getBLASIndex() { return blasIndex_; }
+
+        uint32_t getInstanceIndex() { return instanceIndex_; }
+        void setInstanceIndex(uint32_t index) { instanceIndex_ = index; }
+
+        void setNumTriangles(uint32_t num) { numTriangles_ = num; }
 
     private:
         float intensity_;
         glm::vec3 color_;
         bool isTwoSided_;
 
+        uint32_t blasIndex_ = 0; // this light's index into the blas vector, used when making the tlas
+        uint32_t instanceIndex_ = 0; // this light's custom index in the TLAS
+        const std::string objPath_;
+
         uint32_t vertexOffset_ = 0;
+        uint32_t indexOffset_  = 0;
+
+        uint32_t numTriangles_ = 0;
 
         vk::TransformMatrixKHR transform_ = std::array<std::array<float, 4>, 3>{{
-               {1.0f, 0.0f, 0.0f, 0.0f},  // No Transform
-               {0.0f, 1.0f, 0.0f, 0.0f},
-               {0.0f, 0.0f, 1.0f, 0.0f}
-        }};
+                        {1.0f, 0.0f, 0.0f, 0.0f},  // No Transform
+                        {0.0f, 1.0f, 0.0f, 0.0f},
+                        {0.0f, 0.0f, 1.0f, 0.0f}
+                }};
         const std::vector<glm::vec3> points_ = {glm::vec3{-0.5, -0.5, 0.0},
                                                glm::vec3{-0.5, 0.5, 0.0},
                                                glm::vec3{0.5, 0.5, 0.0},
-                                               glm::vec3{0.5, -0.5, 0.0}}; // DO NOT TOUCH, JUST CHANGE TRANSFORM
+                                               glm::vec3{0.5, -0.5, 0.0}}; // Initial square shape, DO NOT TOUCH, JUST CHANGE TRANSFORM
     };
 
     AreaLight::GPUAreaLightInfo AreaLight::getGPUInfo() {
@@ -65,8 +85,9 @@ namespace scene {
             color_,
             intensity_,
             vertexOffset_,
+            indexOffset_,
+            numTriangles_,
             isTwoSided_,
-            glm::vec2(0.0),
             core::utils::PackTransformMatrix(transform_)
         };
     }

@@ -2,6 +2,7 @@ module;
 
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <tiny_obj_loader.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
@@ -132,65 +133,63 @@ export namespace app {
             vk::Buffer cameraBuffer = camera_->getBuffer();
 
             // Create the objects in the scene
-            std::vector<scene::Object> objects = {};
-            scene::Object ground("../../assets/objects/basic_geo/cube.obj");
-            ground.setSpecular(1.0);
-            ground.setColor("../../assets/textures/basic/concrete2.jpg");
-            ground.scale(8.0);
-            ground.move(glm::vec3(0,-31.3,0));
+            std::vector<std::shared_ptr<scene::Object>> objects = {};
+
+            auto ground = std::make_shared<scene::Object>("../../assets/objects/basic_geo/cube.obj");
+            ground->setSpecular(0.8);
+            ground->setColor("../../assets/textures/basic/concrete2.jpg");
+            ground->scale(50.0);
+            ground->move(glm::vec3(10,-28.6,-10.0));
             objects.push_back(ground);
 
-            scene::Object sphere("../../assets/objects/basic_geo/sphere.obj");
-            sphere.setSpecular(0.3);
-            sphere.setColor(glm::vec3(1.0, 0.6, 0.6));
-            sphere.scale(0.6);
-            sphere.move(glm::vec3(-4.5,-2.1,0.20));
+            auto sphere = std::make_shared<scene::Object>("../../assets/objects/basic_geo/sphere.obj");
+            sphere->setSpecular(0.3);
+            sphere->setColor(glm::vec3(1.0, 0.6, 0.6));
+            sphere->scale(0.6);
+            sphere->move(glm::vec3(-4.5,-2.1,-1.20));
             objects.push_back(sphere);
 
-            scene::Object moon("../../assets/objects/basic_geo/moon.obj");
-            moon.setSpecular(0.8);
-            moon.setColor("../../assets/textures/basic/moon.png");
-            moon.scale(0.015);
-            moon.move(glm::vec3(0.0,-2.3,1.0));
+            auto moon = std::make_shared<scene::Object>("../../assets/objects/basic_geo/moon.obj");
+            moon->setSpecular(0.8);
+            moon->setColor("../../assets/textures/basic/moon.png");
+            moon->scale(0.015);
+            moon->move(glm::vec3(0.0,-2.3,2.0));
             objects.push_back(moon);
 
-            scene::Object metalSphere("../../assets/objects/basic_geo/sphere.obj");
-            metalSphere.setSpecular(0.08);
-            metalSphere.setColor(glm::vec3(0.7, 1.0, 0.6));
-            metalSphere.scale(0.5);
-            metalSphere.setMetallic(0.94);
-            metalSphere.move(glm::vec3(4.0,-2.3,-3.3));
+            auto metalSphere = std::make_shared<scene::Object>("../../assets/objects/basic_geo/sphere.obj");
+            metalSphere->setSpecular(0.08);
+            metalSphere->setColor(glm::vec3(0.7, 1.0, 0.6));
+            metalSphere->scale(0.5);
+            metalSphere->setMetallic(0.94);
+            metalSphere->move(glm::vec3(4.0,-2.3,-3.3));
             objects.push_back(metalSphere);
 
-//            scene::Object sphere2("../../assets/objects/basic_geo/sphere.obj");
-//            sphere2.setSpecular(0.1);
-//            sphere2.setColor(glm::vec3(0.7));
-//            sphere2.scale(0.5);
-//            sphere2.move(glm::vec3(-3.0,-2.5,1.5));
-//            objects.push_back(sphere2);
+            std::vector<std::shared_ptr<scene::AreaLight>> lights = {};
+            // takes in intensity, color, if it's two sided, and path (optional, defaults to square)
 
-            std::vector<scene::AreaLight> lights = {};
-            // takes in intensity and color   //payload.roughness = ToLinear(payload.roughness);
-
-            scene::AreaLight light1(4.0, glm::vec3(1.0), false);
-            light1.scale(glm::vec3(4.0,2.0,1.0));
-            light1.move(glm::vec3(9.0,-2.0,0.0));
-            light1.rotate(glm::vec3(0.0,90.0,0.0));
-            light1.rotate(glm::vec3(0.0,0.0,165.0));
+            auto light1 = std::make_shared<scene::AreaLight>(2.0, glm::vec3(1.0,1.0, 1.0), false);
+            light1->move(glm::vec3(8.0,-1.5,0.0));
+            light1->scale(glm::vec3(4.0,2.5,1.0));
+            light1->rotate(glm::vec3(0.0,90.0,0.0));
+            light1->rotate(glm::vec3(0.0,0.0,165.0));
             lights.push_back(light1);
-
-            scene::AreaLight light2(4.0, glm::vec3(1.0,1.0, 0.5), false);
-            light2.scale(glm::vec3(4.0,2.0,1.0));
-            light2.move(glm::vec3(-11.0,-2.0,0.0));
-            light2.rotate(glm::vec3(0.0,90.0,0.0));
-            light2.rotate(glm::vec3(0.0,0.0,15.0));
+//
+            auto light2 = std::make_shared<scene::AreaLight>(2.0, glm::vec3(1.0,1.0, 0.2), false);
+            light2->scale(glm::vec3(4.0,2.5,1.0));
+            light2->move(glm::vec3(-10.0,-1.5,0.0));
+            light2->rotate(glm::vec3(0.0,90.0,0.0));
+            light2->rotate(glm::vec3(0.0,0.0,15.0));
             lights.push_back(light2);
 
+            auto sphereLight = std::make_shared<scene::AreaLight>(2.0, glm::vec3(1.0,1.0, 1.0), false, "../../assets/objects/lights/sphere.obj");
+            sphereLight->move(glm::vec3(0.0, 2.0, -12.0));
+            sphereLight->scale(glm::vec3(0.5,0.5,0.5));
+            lights.push_back(sphereLight);
 
-            auto sceneInfo = std::move(app::setup::CreateScene::createSceneFromObjectsAndLights(*device_, commandPool, objects, lights));
+            auto sceneInfo = app::setup::CreateScene::createSceneFromObjectsAndLights(*device_, commandPool, objects, lights);
             auto descriptorTextures = std::move(sceneInfo.descriptorTextures);
 
-            auto geometryInfo = std::move(sceneInfo.geoReturnInfo);
+            auto& geometryInfo = sceneInfo.geoReturnInfo;
             std::vector<glm::vec3>                     vertexPositions = geometryInfo.vertexPositions;
             std::vector<scene::geometry::Vertex>       vertices = geometryInfo.vertices;
             std::vector<uint32_t>                      indices = geometryInfo.indices;
@@ -226,9 +225,9 @@ export namespace app {
             std::vector<vulkan::memory::Buffer::FillRegion> lightInfoDataRegions {
                     {lightInfos.data() , lightInfosSize, 0},
             };
-            vulkan::memory::Buffer lightInfoBuffer = vulkan::memory::Buffer::createDeviceLocalBuffer(commandPool, *device_, lightInfosSize,
-                                                                                                     vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress
-                                                                                                     | vk::BufferUsageFlagBits::eTransferDst, lightInfoDataRegions);
+            vulkan::memory::Buffer lightInfoBuffer (*device_, lightInfosSize,vk::BufferUsageFlagBits::eStorageBuffer,
+                                                    vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+            lightInfoBuffer.fill(lightInfoDataRegions);
 
             // Create two descriptor sets, one used in only the raytracing pipeline
             // and one that is also accessed in the compute pipeline
@@ -238,7 +237,6 @@ export namespace app {
             std::vector<std::vector<vk::DescriptorPoolSize>> poolGroups = {};
 
             // add images used for rendering to the ray and compute layout
-            // TODO fix this becuase not all are used in the RayGen/Compute
             for (int i = 0; i < renderImages.size(); ++i) {
                 rayAndComputeLayout.addBinding(i, vk::DescriptorType::eStorageImage,  vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eCompute);
             }
@@ -249,7 +247,7 @@ export namespace app {
             rayTraceOnlyLayout.addBinding(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR);  // TLAS
             rayTraceOnlyLayout.addBinding(1, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR);  // camera
             rayTraceOnlyLayout.addBinding(2, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR); // vertex buffer
-            rayTraceOnlyLayout.addBinding(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR); // index buffer
+            rayTraceOnlyLayout.addBinding(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR); // index buffer
             rayTraceOnlyLayout.addBinding(4, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR, static_cast<uint32_t>(descriptorTextures.size())); // textures
             rayTraceOnlyLayout.addBinding(5, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR); //object infos
             rayTraceOnlyLayout.addBinding(6, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR); // light infos
@@ -299,6 +297,15 @@ export namespace app {
 
             // Main Loop
             while (!window_->shouldClose()) {
+                moon->move(glm::vec3(sin(frame * 0.02f + glm::pi<float>() / 2) * 0.1, 0.0, 0.0));
+                tlas->updateTransform(moon->getInstanceIndex(), moon->getTransform());
+
+                // TODO TODO TODO These lines are discusting hard coded crap, that you need going to change
+                sphereLight->move(glm::vec3(0.0, 0.0, (sin(frame * 0.01f) * 0.1)));
+                tlas->updateTransform(sphereLight->getInstanceIndex(), sphereLight->getTransform());
+                scene::AreaLight::GPUAreaLightInfo info = sphereLight->getGPUInfo();
+                lightInfoBuffer.fill(&info, sizeof(scene::AreaLight::GPUAreaLightInfo), 2 * sizeof(scene::AreaLight::GPUAreaLightInfo));
+
                 float newTime = window_->getTime();
                 float frameTime = newTime - currentTime;
                 currentTime = newTime;
@@ -309,6 +316,7 @@ export namespace app {
                 imageIndex = swapchain_->acquireNextImage(imageAcquiredSemaphore);
 
                 auto cmd = commandPool.getSingleUseBuffer();
+                tlas->refit(*device_, commandPool);
                 cmd->bindPipeline(vk::PipelineBindPoint::eRayTracingKHR, raytracePipeline.get());
                 cmd->bindDescriptorSets(vk::PipelineBindPoint::eRayTracingKHR, raytracePipeline.getLayout(), 0, rayAndComputeSet, nullptr);
                 cmd->bindDescriptorSets(vk::PipelineBindPoint::eRayTracingKHR, raytracePipeline.getLayout(), 1,      rayTraceSet, nullptr);

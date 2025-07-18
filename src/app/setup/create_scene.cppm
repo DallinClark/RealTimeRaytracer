@@ -2,6 +2,7 @@ module;
 
 #include <vulkan/vulkan.hpp>
 #include <../../external/LUT/ltc_matrix.h>
+#include <string>
 
 export module app.setup.create_scene;
 
@@ -34,7 +35,7 @@ export namespace app::setup {
             vulkan::memory::ImageSampler textureSampler;
         };
         static SceneReturnInfo createSceneFromObjectsAndLights(const vulkan::context::Device& device, vulkan::context::CommandPool &commandPool,
-                                        std::vector<scene::Object>& objects, std::vector<scene::AreaLight>& areaLights);
+                                                               std::vector<std::shared_ptr<scene::Object>>& objects, std::vector<std::shared_ptr<scene::AreaLight>>& areaLights);
 
         static std::vector<std::unique_ptr<vulkan::memory::Image>> createLTCImages(const vulkan::context::Device& device, vulkan::context::CommandPool& pool, int LTC_WIDTH, int LTC_HEIGHT);
 
@@ -42,8 +43,7 @@ export namespace app::setup {
     };
 
     CreateScene::SceneReturnInfo CreateScene::createSceneFromObjectsAndLights(const vulkan::context::Device& device, vulkan::context::CommandPool &commandPool,
-                                                      std::vector<scene::Object>& objects, std::vector<scene::AreaLight>& areaLights){
-
+                                                      std::vector<std::shared_ptr<scene::Object>>& objects, std::vector<std::shared_ptr<scene::AreaLight>>& areaLights){
         // TODO let textures be reused, use unordered map
         // make the image sampler
         vulkan::memory::ImageSampler texSampler(device);
@@ -62,19 +62,19 @@ export namespace app::setup {
 
         // If needed, create the textures
         for (auto& object : objects) {
-            if (object.usesSpecularMap()) {
-                auto spec = core::file::createTextureImage(device, object.getSpecularPath(), commandPool, true);
-                object.setSpecularMapIndex(static_cast<uint32_t>(textures.size()));
+            if (object->usesSpecularMap()) {
+                auto spec = core::file::createTextureImage(device, object->getSpecularPath(), commandPool, true);
+                object->setSpecularMapIndex(static_cast<uint32_t>(textures.size()));
                 textures.push_back(std::move(spec));
             }
-            if (object.usesMetallicMap()) {
-                auto metal = core::file::createTextureImage(device, object.getMetallicPath(), commandPool, true);
-                object.setMetallicMapIndex(static_cast<uint32_t>(textures.size()));
+            if (object->usesMetallicMap()) {
+                auto metal = core::file::createTextureImage(device, object->getMetallicPath(), commandPool, true);
+                object->setMetallicMapIndex(static_cast<uint32_t>(textures.size()));
                 textures.push_back(std::move(metal));
             }
-            if (object.usesColorMap()) {
-                auto color = core::file::createTextureImage(device, object.getColorPath(), commandPool, false);
-                object.setColorMapIndex(static_cast<uint32_t>(textures.size()));
+            if (object->usesColorMap()) {
+                auto color = core::file::createTextureImage(device, object->getColorPath(), commandPool, false);
+                object->setColorMapIndex(static_cast<uint32_t>(textures.size()));
                 textures.push_back(std::move(color));
             }
         }
@@ -90,10 +90,10 @@ export namespace app::setup {
         std::vector<scene::AreaLight::GPUAreaLightInfo> GPUAreaLights;
 
         for (auto& light : areaLights) {
-            GPUAreaLights.push_back(light.getGPUInfo());
+            GPUAreaLights.push_back(light->getGPUInfo());
         }
         for (auto& object : objects) {
-            GPUObjects.push_back(object.getGPUInfo());
+            GPUObjects.push_back(object->getGPUInfo());
         }
         return CreateScene::SceneReturnInfo{
             std::move(GPUObjects),

@@ -56,6 +56,8 @@ namespace scene {
 
         void setVertexOffset(uint32_t offset) { vertexOffset_ = offset; };
         void  setIndexOffset(uint32_t offset) { indexOffset_  = offset; };
+        void setNumTriangles(uint32_t offset) { numTriangles_ = offset; };
+
 
 
         // move the object in x, y, and z direction
@@ -75,10 +77,14 @@ namespace scene {
         void setBLASIndex(uint32_t index) { BLASIndex_ = index; };
         uint32_t getBLASIndex() { return BLASIndex_; };
 
+        void setInstanceIndex(uint32_t index) { instanceIndex_ = index; };
+        uint32_t getInstanceIndex() { return instanceIndex_; };
+
         vk::TransformMatrixKHR getTransform() { return transform_; };
         GPUObjectInfo getGPUInfo();
 
-
+        // Needed for fucntion in TLAS, need to update to make this and light class to be parented to fix
+        std::vector<glm::vec3> getPoints() { return {}; }
 
     private:
         const std::string objPath_;
@@ -110,6 +116,9 @@ namespace scene {
         uint32_t BLASIndex_ = 0; // used in the TLAS creation to see which BLAS this object corresponds to
         uint32_t vertexOffset_ = 0; // offset in the vertex buffer
         uint32_t indexOffset_ = 0; //offset in the index buffer
+        uint32_t instanceIndex_ = 0; // BLAS instance index in the TLAS
+
+        uint32_t numTriangles_ = 0;
     };
 
     Object::GPUObjectInfo Object::getGPUInfo() {

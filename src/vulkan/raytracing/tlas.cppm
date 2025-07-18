@@ -17,14 +17,18 @@ namespace vulkan::raytracing {
 
     export class TLAS {
     public:
+        // TODO make a build function that does that second half of the constructor and does refit if update = true
         TLAS(const context::Device& device, context::CommandPool& commandPool,
-             const std::vector<const BLAS*>& blass, std::vector<scene::Object>& objects,
-             std::vector<scene::AreaLight>& areaLights);
+             const std::vector<const BLAS*>& blass, std::vector<std::shared_ptr<scene::Object>>& object,
+             std::vector<std::shared_ptr<scene::AreaLight>>& areaareaLights);
 
         const vk::AccelerationStructureKHR& get() const { return accelerationStructure_.get(); }
         vk::DeviceAddress deviceAddress() const { return deviceAddress_; }
 
         vk::Buffer getBuffer() { return buffer_->get(); }
+
+        void updateTransform(uint32_t index, const vk::TransformMatrixKHR& newTransform);
+        void refit(const context::Device& device, context::CommandPool& commandPool);
 
     private:
         vk::Device                            device_;
@@ -32,75 +36,65 @@ namespace vulkan::raytracing {
         std::optional<vulkan::memory::Buffer> buffer_;
         vk::DeviceAddress                     deviceAddress_;
         vk::UniqueAccelerationStructureKHR    accelerationStructure_;
-        std::vector<scene::AreaLight> lights_;
-
+        std::vector<vk::AccelerationStructureInstanceKHR> accelInstances_;
+        std::optional<vulkan::memory::Buffer> instanceBuffer_;
+        bool needsUpdate_;
     };
 
     TLAS::TLAS(const context::Device& device, context::CommandPool& commandPool,
-               const std::vector<const BLAS*>& blass, std::vector<scene::Object>& objects, std::vector<scene::AreaLight>& areaLights) :
-            device_(device.get()), physicalDevice_(device.physical()), lights_(areaLights) {
+               const std::vector<const BLAS*>& blass, std::vector<std::shared_ptr<scene::Object>>& objects, std::vector<std::shared_ptr<scene::AreaLight>>& areaLights) :
+            device_(device.get()), physicalDevice_(device.physical()), needsUpdate_(false) {
 
-        std::vector<vk::AccelerationStructureInstanceKHR> accelInstances; // MAYBE ADD A .reserve
+        uint32_t numareaLights = areaLights.size();
 
-        uint32_t numLights = areaLights.size();
+        int i = 0; // custom index for the blas
 
-        for (int i = 0; i < numLights; ++i) {
-            auto currLight = areaLights[i];
-
-            uint32_t blasIndex = 0; // ALL AREA LIGHTS SHARE A BLAS AT 0
-            vk::TransformMatrixKHR transform = currLight.getTransform();
+        auto createBLASInstance = [&](auto& currObject) {
+            uint32_t blasIndex = currObject->getBLASIndex();
+            vk::TransformMatrixKHR transform = currObject->getTransform();
 
             const BLAS* blas = blass[blasIndex];
+
+            currObject->setNumTriangles(blas->getIndexCount() / 3);
 
             vk::AccelerationStructureInstanceKHR instance;
             instance.setTransform(transform);
             instance.setAccelerationStructureReference(blas->getAddress());
             instance.setMask(0xFF);
             //instance.setInstanceShaderBindingTableRecordOffset(0); // Look into this later
-
-            instance.setInstanceCustomIndex(i); // index in shader, needs to match index in light struct passed to shader
-            instance.setFlags(vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable);
-
-            accelInstances.push_back(instance);
-        }
-
-        for (int i = 0; i < objects.size(); ++i) {
-            scene::Object& currObject = objects[i];
-
-            uint32_t blasIndex = currObject.getBLASIndex();
-            vk::TransformMatrixKHR transform = currObject.getTransform();
-
-            const BLAS* blas = blass[blasIndex];
-
-            vk::AccelerationStructureInstanceKHR instance;
-            instance.setTransform(transform);
-            instance.setAccelerationStructureReference(blas->getAddress());
-            instance.setMask(0xFF);
-            //instance.setInstanceShaderBindingTableRecordOffset(0); // Look into this later
-
-            instance.setInstanceCustomIndex(i + numLights); // used in shaders, needs to match index in object struct + number of lights
+            currObject->setInstanceIndex(i);
+            instance.setInstanceCustomIndex(i); // used in shaders, needs to match index in object struct + number of areaLights
             instance.setFlags(vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable);  // MAYBE ENABLE IN FUTURE
 
-            currObject.setVertexOffset(blas->getVertexIndexOffset());
-            currObject.setIndexOffset(blas->getIndexIndexOffset());
 
-            accelInstances.push_back(instance);
+            currObject->setVertexOffset(blas->getVertexIndexOffset());
+            currObject->setIndexOffset(blas->getIndexIndexOffset());
+
+            accelInstances_.push_back(instance);
+            ++i;
+        };
+        
+        for (auto& light : areaLights) {
+            createBLASInstance(light);
+        }
+        for (auto& object : objects) {
+            createBLASInstance(object);
         }
 
-        uint32_t instanceCount = accelInstances.size();
+        uint32_t instanceCount = accelInstances_.size();
         // Upload instances to buffer
-        memory::Buffer instanceBuffer(
+        instanceBuffer_ = memory::Buffer(
                 device,
                 sizeof(vk::AccelerationStructureInstanceKHR) * instanceCount,
                 vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR | vk::BufferUsageFlagBits::eStorageBuffer |
                 vk::BufferUsageFlagBits::eShaderDeviceAddress,
                 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
         );
-        instanceBuffer.fill(accelInstances.data(), sizeof(vk::AccelerationStructureInstanceKHR) * instanceCount);
+        instanceBuffer_->fill(accelInstances_.data(), sizeof(vk::AccelerationStructureInstanceKHR) * instanceCount);
 
         vk::AccelerationStructureGeometryInstancesDataKHR instancesData;
         instancesData.setArrayOfPointers(false);
-        instancesData.setData(instanceBuffer.getAddress());
+        instancesData.setData(instanceBuffer_->getAddress());
 
         vk::AccelerationStructureGeometryKHR instanceGeometry;
         instanceGeometry.setGeometryType(vk::GeometryTypeKHR::eInstances);
@@ -109,7 +103,7 @@ namespace vulkan::raytracing {
 
         vk::AccelerationStructureBuildGeometryInfoKHR buildGeometryInfo;
         buildGeometryInfo.setType(vk::AccelerationStructureTypeKHR::eTopLevel);
-        buildGeometryInfo.setFlags(vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace);
+        buildGeometryInfo.setFlags(vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace | vk::BuildAccelerationStructureFlagBitsKHR::eAllowUpdate);
         buildGeometryInfo.setGeometries(instanceGeometry);
         buildGeometryInfo.setMode(vk::BuildAccelerationStructureModeKHR::eBuild);
 
@@ -153,4 +147,63 @@ namespace vulkan::raytracing {
 
         deviceAddress_ = device_.getAccelerationStructureAddressKHR({accelerationStructure_.get()});
     }
+
+    void TLAS::updateTransform(uint32_t index, const vk::TransformMatrixKHR& newTransform) {
+        accelInstances_[index].transform = newTransform;
+
+        // Update instance buffer
+        instanceBuffer_->fill(accelInstances_.data(),
+                              sizeof(vk::AccelerationStructureInstanceKHR) * accelInstances_.size());
+
+        needsUpdate_ = true;
+    }
+
+    void TLAS::refit(const context::Device& device, context::CommandPool& commandPool) {
+        if (!needsUpdate_) {
+            return;
+        }
+        vk::AccelerationStructureGeometryInstancesDataKHR instancesData;
+        instancesData.setArrayOfPointers(false);
+        instancesData.setData(instanceBuffer_->getAddress());
+
+        vk::AccelerationStructureGeometryKHR instanceGeometry;
+        instanceGeometry.setGeometryType(vk::GeometryTypeKHR::eInstances);
+        instanceGeometry.setGeometry(instancesData);
+        instanceGeometry.setFlags(vk::GeometryFlagBitsKHR::eOpaque);
+
+        vk::AccelerationStructureBuildGeometryInfoKHR buildGeometryInfo;
+        buildGeometryInfo.setType(vk::AccelerationStructureTypeKHR::eTopLevel);
+        buildGeometryInfo.setFlags(vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace | vk::BuildAccelerationStructureFlagBitsKHR::eAllowUpdate);
+        buildGeometryInfo.setGeometries(instanceGeometry);
+        buildGeometryInfo.setMode(vk::BuildAccelerationStructureModeKHR::eUpdate);
+        buildGeometryInfo.setDstAccelerationStructure(accelerationStructure_.get());
+        buildGeometryInfo.setSrcAccelerationStructure(accelerationStructure_.get());
+
+        std::vector<uint32_t> primitiveCounts{ static_cast<uint32_t>(accelInstances_.size()) };
+
+        auto sizeInfo = device_.getAccelerationStructureBuildSizesKHR(
+                vk::AccelerationStructureBuildTypeKHR::eDevice,
+                buildGeometryInfo, primitiveCounts);
+
+        memory::Buffer scratch(
+                device,
+                sizeInfo.buildScratchSize,
+                vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress,
+                vk::MemoryPropertyFlagBits::eDeviceLocal
+        );
+
+        buildGeometryInfo.setScratchData(scratch.getAddress());
+
+        vk::AccelerationStructureBuildRangeInfoKHR buildRangeInfo;
+        buildRangeInfo.setPrimitiveCount(static_cast<uint32_t>(accelInstances_.size()));
+        buildRangeInfo.setFirstVertex(0);
+        buildRangeInfo.setPrimitiveOffset(0);
+        buildRangeInfo.setTransformOffset(0);
+
+        auto cmd = commandPool.getSingleUseBuffer();
+        cmd->buildAccelerationStructuresKHR(buildGeometryInfo, &buildRangeInfo);
+        commandPool.submitSingleUse(std::move(cmd), device.computeQueue());
+        device_.waitIdle();
+    }
+
 } // namespace vulkan::raytracing
