@@ -164,6 +164,13 @@ export namespace app {
             metalSphere->move(glm::vec3(4.0,-2.3,-3.3));
             objects.push_back(metalSphere);
 
+            auto holeSphere = std::make_shared<scene::Object>("../../assets/objects/basic_geo/hole_sphere.obj");
+            holeSphere->setSpecular(0.6);
+            holeSphere->setColor("../../assets/textures/basic/sphere_hole_color.png");
+            holeSphere->scale(11.5);
+            holeSphere->move(glm::vec3(0.0,2.3,-12.3));
+            objects.push_back(holeSphere);
+
             std::vector<std::shared_ptr<scene::AreaLight>> lights = {};
             // takes in intensity, color, if it's two sided, and path (optional, defaults to square)
 
@@ -181,7 +188,7 @@ export namespace app {
             light2->rotate(glm::vec3(0.0,0.0,15.0));
             lights.push_back(light2);
 
-            auto sphereLight = std::make_shared<scene::AreaLight>(2.0, glm::vec3(1.0,1.0, 1.0), false, "../../assets/objects/lights/sphere.obj");
+            auto sphereLight = std::make_shared<scene::AreaLight>(3.0, glm::vec3(1.0,1.0, 1.0), false, "../../assets/objects/lights/sphere.obj");
             sphereLight->move(glm::vec3(0.0, 2.0, -12.0));
             sphereLight->scale(glm::vec3(0.5,0.5,0.5));
             lights.push_back(sphereLight);
@@ -299,6 +306,9 @@ export namespace app {
             while (!window_->shouldClose()) {
                 moon->move(glm::vec3(sin(frame * 0.02f + glm::pi<float>() / 2) * 0.1, 0.0, 0.0));
                 tlas->updateTransform(moon->getInstanceIndex(), moon->getTransform());
+
+                holeSphere->rotate(glm::vec3(0.0,0.5,0.0));
+                tlas->updateTransform(holeSphere->getInstanceIndex(), holeSphere->getTransform());
 
                 // TODO TODO TODO These lines are discusting hard coded crap, that you need going to change
                 sphereLight->move(glm::vec3(0.0, 0.0, (sin(frame * 0.01f) * 0.1)));
