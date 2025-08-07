@@ -77,7 +77,13 @@ void main() {
     vec2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
 
     if (objectInfo.usesColorMap != 0) {
+
         payload.color = texture(nonuniformEXT(texSamplers[objectInfo.colorIndex]), uv).rgb;
+
+        //if (objectInfo.colorIndex == 15) {
+        //   payload.color = vec3(0.5,0.5,0.5);
+        //}
+
     } else {
         payload.color = objectInfo.color;
     }
@@ -94,8 +100,10 @@ void main() {
         payload.metallic = objectInfo.metallic;
     }
 
+
    payload.color = ToLinear(payload.color);
-   //payload.roughness = ToLinear(payload.roughness);
+
+   payload.roughness = 1.0 - payload.roughness;
    payload.normal = hitNormal;
    payload.hitPoint = hitPoint;
 

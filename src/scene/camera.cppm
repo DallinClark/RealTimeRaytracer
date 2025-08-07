@@ -47,6 +47,7 @@ namespace scene {
             lookAtPoint_ = newLookAt;
             GPUDataNeedsUpdate_ = true;
         }
+        void rotateY(float angleRadians); // rotate around the y axis
 
     private:
         bool          GPUDataNeedsUpdate_;
@@ -142,6 +143,12 @@ namespace scene {
             pitch_ = 89.0f;
         if (pitch_ < -89.0f)
             pitch_ = -89.0f;
+
+        GPUDataNeedsUpdate_ = true;
+    }
+    void Camera::rotateY(float angleRadians) {
+        yaw_ += angleRadians;
+
 
         GPUDataNeedsUpdate_ = true;
     }

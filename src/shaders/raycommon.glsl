@@ -14,12 +14,6 @@ struct GPUCameraData {
     vec3 verticalViewportDelta; float _pad3;
 };
 
-struct CombinedPayload {
-    vec3 color;
-    bool isShadowed;
-    int depth;
-};
-
 //struct SceneInfo {
 //    uint frame;
 //    uint numAreaLights;
@@ -35,15 +29,18 @@ float random(uint seed) {
 struct ObjectInfo {
     uint vertexOffset;
     uint indexOffset;
+    vec2 pad0_;
 
     // 0 is false, 1 is true
     uint usesColorMap;
     uint usesSpecularMap;
     uint usesMetallicMap;
+    uint usesOpacityMap;
 
     uint colorIndex;
     uint specularIndex;
     uint metallicIndex;
+    uint opacityIndex;
 
     vec3 color;
     float pad1_;
@@ -58,8 +55,9 @@ struct LightInfo {
     float intensity;
 
     uint vertexOffset;
+    uint indexOffset;
+    uint numTriangles;
     bool isTwoSided;
-    vec2 pad;
 
     mat4 transform;
 };
@@ -74,11 +72,8 @@ struct HitInfo {
 
     bool hitLight;
     bool missed;
+    bool isShadowRay;
 };
 
-
-struct ShadowRayPayload {
-    bool isShadowed;
-};
 
 #endif

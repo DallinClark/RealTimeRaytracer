@@ -22,9 +22,9 @@ namespace vulkan {
     public:
         RayTracingPipeline(const context::Device &device, std::vector<vk::DescriptorSetLayout> &descriptorSetLayouts,
                            std::string_view rgenPath, std::string_view rmissPath,
-                           std::string_view shadowMissPath, std::string_view rchitPath);
+                           std::string_view rchitPath, std::string_view anyhitPath);
 
-        void createShaderModules(std::string_view rgen, std::string_view rmiss, std::string_view shadowMiss, std::string_view rchit);
+        void createShaderModules(std::string_view rgen, std::string_view rmiss, std::string_view rchit, std::string_view anyhit);
 
         void createShaderGroups();
 
@@ -43,7 +43,7 @@ namespace vulkan {
         std::vector<vk::DescriptorSetLayout> descriptorSetLayouts_;
 
         // Shader modules
-        vk::UniqueShaderModule rgen_, rmiss_, shadowMiss_, rchit_;
+        vk::UniqueShaderModule rgen_, rmiss_, rchit_, anyhit_;
         std::vector<vk::RayTracingShaderGroupCreateInfoKHR> shaderGroups_;
         std::vector<vk::PipelineShaderStageCreateInfo> shaderStages_;
 
@@ -71,21 +71,21 @@ namespace vulkan {
 
     RayTracingPipeline::RayTracingPipeline(const context::Device &device, std::vector<vk::DescriptorSetLayout> &descriptorSetLayouts,
                                            std::string_view rgenPath, std::string_view rmissPath,
-                                           std::string_view shadowMissPath, std::string_view rchitPath)
+                                           std::string_view rchitPath, std::string_view anyhitPath)
             : device_{device}, descriptorSetLayouts_(descriptorSetLayouts) {
 
-        createShaderModules(rgenPath, rmissPath, shadowMissPath, rchitPath);
+        createShaderModules(rgenPath, rmissPath, rchitPath, anyhitPath);
         createShaderGroups();
         createPipelineLayout();
         createPipeline();
         createShaderBindingTable();
     }
 
-    void RayTracingPipeline::createShaderModules(std::string_view rgen, std::string_view rmiss, std::string_view shadowMiss, std::string_view rchit) {
+    void RayTracingPipeline::createShaderModules(std::string_view rgen, std::string_view rmiss, std::string_view rchit, std::string_view anyhit) {
         rgen_ = createShaderModule(rgen);
         rmiss_ = createShaderModule(rmiss);
-        shadowMiss_ =  createShaderModule(shadowMiss);
         rchit_ = createShaderModule(rchit);
+        anyhit_ = createShaderModule(anyhit);
     }
 
     vk::UniqueShaderModule RayTracingPipeline::createShaderModule(std::string_view path) {
@@ -103,18 +103,16 @@ namespace vulkan {
         shaderStages_ = {
                 {{}, vk::ShaderStageFlagBits::eRaygenKHR,     rgen_.get(),  "main"}, // main is the entry point
                 {{}, vk::ShaderStageFlagBits::eMissKHR,       rmiss_.get(), "main"},
-                {{}, vk::ShaderStageFlagBits::eMissKHR,       shadowMiss_.get(), "main"},
                 {{}, vk::ShaderStageFlagBits::eClosestHitKHR, rchit_.get(), "main"},
+                {{}, vk::ShaderStageFlagBits::eAnyHitKHR, anyhit_.get(), "main"},
         };
         shaderGroups_ = {
                 // 0: raygen
                 {vk::RayTracingShaderGroupTypeKHR::eGeneral,           0, VK_SHADER_UNUSED_KHR, VK_SHADER_UNUSED_KHR, VK_SHADER_UNUSED_KHR},
                 // 1: main miss
                 {vk::RayTracingShaderGroupTypeKHR::eGeneral,           1, VK_SHADER_UNUSED_KHR, VK_SHADER_UNUSED_KHR, VK_SHADER_UNUSED_KHR},
-                // 2: shadow miss
-                {vk::RayTracingShaderGroupTypeKHR::eGeneral,           2, VK_SHADER_UNUSED_KHR, VK_SHADER_UNUSED_KHR, VK_SHADER_UNUSED_KHR},
-                // 3: main hit group
-                {vk::RayTracingShaderGroupTypeKHR::eTrianglesHitGroup, VK_SHADER_UNUSED_KHR, 3, VK_SHADER_UNUSED_KHR, VK_SHADER_UNUSED_KHR},
+                // 2: main hit group
+                {vk::RayTracingShaderGroupTypeKHR::eTrianglesHitGroup, VK_SHADER_UNUSED_KHR, 2, 3, VK_SHADER_UNUSED_KHR},
         };
     }
 
@@ -127,7 +125,7 @@ namespace vulkan {
         vk::PushConstantRange pushConstant;
         pushConstant.setOffset(0);
         pushConstant.setSize(sizeof(scene::SceneInfo));
-        pushConstant.setStageFlags(vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR);
+        pushConstant.setStageFlags(vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eAnyHitKHR);
 
         layoutInfo.setPPushConstantRanges(&pushConstant);
         layoutInfo.setPushConstantRangeCount(1);
@@ -168,7 +166,7 @@ namespace vulkan {
     void RayTracingPipeline::createShaderBindingTable() {
         queryRayTracingProperties();
 
-        uint32_t missCount{2};
+        uint32_t missCount{1};
         uint32_t hitCount{1};
         auto handleCount = 1 + missCount + hitCount;
         const uint32_t handleSize = rtProps_.shaderGroupHandleSize;
@@ -203,10 +201,9 @@ namespace vulkan {
 
         // TODO this can be better all of it
         std::vector<vulkan::memory::Buffer::FillRegion> regions = {
-                {handles.data() + handleSize * 0, handleSize, 0},
-                {handles.data() + handleSize * 1, handleSize, raygenRegion_.size},
-                {handles.data() + handleSize * 2, handleSize, raygenRegion_.size + missRegion_.stride},
-                {handles.data() + handleSize * 3, handleSize, raygenRegion_.size + missRegion_.size}
+                {handles.data() + handleSize * 0, handleSize, 0},    // raygen
+                {handles.data() + handleSize * 1, handleSize, raygenRegion_.size}, // miss
+                {handles.data() + handleSize * 2, handleSize, raygenRegion_.size + missRegion_.size} // hit
         };
 
         SBTbuffer_->fill(regions);

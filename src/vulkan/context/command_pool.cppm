@@ -2,14 +2,6 @@ module;
 
 #include <vulkan/vulkan.hpp>
 
-#include <vector>
-#include <string_view>
-#include <set>
-#include <optional>
-#include <algorithm>
-#include <stdexcept>
-#include <cstring>
-
 export module vulkan.context.command_pool;
 
 import core.log;
@@ -25,7 +17,13 @@ namespace vulkan::context {
             return commandPool_.get();
         }
 
+        // For single-use (transient) command buffers
         vk::UniqueCommandBuffer getSingleUseBuffer();
+
+        // For reusable command buffers: allocate upfront, user must manage begin/end
+        std::vector<vk::UniqueCommandBuffer> allocateCommandBuffers(int amount);
+
+        // Submit single-use command buffer with fence and wait on it properly
         void submitSingleUse(vk::UniqueCommandBuffer&& buffer, vk::Queue queue) const;
 
     private:
@@ -38,23 +36,21 @@ namespace vulkan::context {
     CommandPool::CommandPool(const vk::Device& device, uint32_t queueIndex)
             : device_(device), queueIndex_(queueIndex) {
 
-        // Create the command pool
         vk::CommandPoolCreateInfo poolCreateInfo{
-                vk::CommandPoolCreateFlagBits::eResetCommandBuffer, // Resettable buffers
-                queueIndex
+                vk::CommandPoolCreateFlagBits::eResetCommandBuffer, // allows resetting buffers individually
+                queueIndex_
         };
         commandPool_ = device_.createCommandPoolUnique(poolCreateInfo);
         core::log::info("Command pool created");
     }
 
     vk::UniqueCommandBuffer CommandPool::getSingleUseBuffer() {
-        // Allocate a primary command buffer
-        vk::CommandBufferAllocateInfo bufferAllocInfo{
-                commandPool_.get(), // pool
-                vk::CommandBufferLevel::ePrimary, // primary level
-                1 // count
+        vk::CommandBufferAllocateInfo allocInfo{
+                commandPool_.get(),
+                vk::CommandBufferLevel::ePrimary,
+                1
         };
-        auto buffers = device_.allocateCommandBuffersUnique(bufferAllocInfo);
+        auto buffers = device_.allocateCommandBuffersUnique(allocInfo);
 
         vk::CommandBufferBeginInfo beginInfo{
                 vk::CommandBufferUsageFlagBits::eOneTimeSubmit
@@ -64,16 +60,33 @@ namespace vulkan::context {
         return std::move(buffers[0]);
     }
 
+    // Allocate reusable command buffer (user must call begin/end manually)
+    std::vector<vk::UniqueCommandBuffer> CommandPool::allocateCommandBuffers(int amount) {
+        vk::CommandBufferAllocateInfo allocInfo{
+                commandPool_.get(),
+                vk::CommandBufferLevel::ePrimary,
+                static_cast<uint32_t>(amount)
+        };
+        return device_.allocateCommandBuffersUnique(allocInfo);
+    }
+
     void CommandPool::submitSingleUse(vk::UniqueCommandBuffer&& buffer, vk::Queue queue) const {
         buffer->end();
 
-        vk::SubmitInfo submitInfo;
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &buffer.get();
+        // Create a fence to synchronize CPU-GPU
+        vk::UniqueFence fence = device_.createFenceUnique({});
 
-        queue.submit(submitInfo, vk::Fence{});
-        queue.waitIdle(); // TODO use the fence
+        vk::SubmitInfo submitInfo{
+                0, nullptr,
+                nullptr,
+                1, &buffer.get()
+        };
+
+        queue.submit(submitInfo, fence.get());
+
+        // Wait on the fence (CPU blocks until GPU work completes)
+        if (device_.waitForFences(fence.get(), VK_TRUE, UINT64_MAX) != vk::Result::eSuccess) {
+            throw std::runtime_error("Failed to wait for fence.");
+        }
     }
-
-
 }

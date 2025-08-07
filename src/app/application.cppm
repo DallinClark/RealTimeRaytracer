@@ -2,6 +2,7 @@ module;
 
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <tiny_obj_loader.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
@@ -40,6 +41,7 @@ import scene.area_light;
 
 import app.setup.geometry_builder;
 import app.setup.create_scene;
+import app.structs;
 
 import vulkan.memory.image_sampler;
 
@@ -121,76 +123,114 @@ export namespace app {
             vulkan::memory::Image finalImage(device_->get(), device_->physical(), extent,
                                                         vk::Format::eR8G8B8A8Unorm, vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc, vk::ImageAspectFlagBits::eColor);
 
+            vulkan::memory::Image normalImage(device_->get(), device_->physical(), extent,
+                                             vk::Format::eR8G8B8A8Unorm, vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc, vk::ImageAspectFlagBits::eColor);
+
+            vulkan::memory::Image positionImage(device_->get(), device_->physical(), extent,
+                                             vk::Format::eR8G8B8A8Unorm, vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc, vk::ImageAspectFlagBits::eColor);
+
             auto cmdImage = commandPool.getSingleUseBuffer();
-            for (vulkan::memory::Image* image : { &analyticImage, &shadowedSampleImage, &unshadowedSampleImage, &denoisedShadowedImage, &denoisedUnshadowedImage, &finalImage }) {
+            for (vulkan::memory::Image* image : { &analyticImage, &shadowedSampleImage, &unshadowedSampleImage, &denoisedShadowedImage, &denoisedUnshadowedImage, &finalImage,
+                                                  &normalImage, &positionImage}) {
                 vulkan::memory::Image::setImageLayout(*cmdImage, image->getImage(), vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral);
                 renderImages.push_back(image->getImageInfo());
             }
             commandPool.submitSingleUse(std::move(cmdImage), device_->computeQueue());
-            device_->get().waitIdle();
 
             vk::Buffer cameraBuffer = camera_->getBuffer();
 
             // Create the objects in the scene
-            std::vector<scene::Object> objects = {};
-            scene::Object ground("../../assets/objects/basic_geo/cube.obj");
-            ground.setSpecular(1.0);
-            ground.setColor("../../assets/textures/basic/concrete2.jpg");
-            ground.scale(8.0);
-            ground.move(glm::vec3(0,-31.3,0));
-            objects.push_back(ground);
+            std::vector<std::shared_ptr<scene::Object>> objects = {};
 
-            scene::Object sphere("../../assets/objects/basic_geo/sphere.obj");
-            sphere.setSpecular(0.3);
-            sphere.setColor(glm::vec3(1.0, 0.6, 0.6));
-            sphere.scale(0.6);
-            sphere.move(glm::vec3(-4.5,-2.1,0.20));
-            objects.push_back(sphere);
+//            auto ground = std::make_shared<scene::Object>("../../assets/objects/basic_geo/cube.obj");
+//            ground->setSpecular(0.8);
+//            ground->setColor("../../assets/textures/basic/concrete2.jpg");
+//            ground->scale(50.0);
+//            ground->move(glm::vec3(10,-28.6,-10.0));
+//            objects.push_back(ground);
+//
+//            auto sphere = std::make_shared<scene::Object>("../../assets/objects/basic_geo/sphere.obj");
+//            sphere->setSpecular(0.3);
+//            sphere->setColor(glm::vec3(1.0, 0.6, 0.6));
+//            sphere->scale(0.6);
+//            sphere->move(glm::vec3(-6.5,-2.1,-1.20));
+//            objects.push_back(sphere);
+//
+//            auto moon = std::make_shared<scene::Object>("../../assets/objects/basic_geo/moon.obj");
+//            moon->setSpecular(0.2);
+//            moon->setColor("../../assets/textures/basic/moon.png");
+//            moon->scale(0.020);
+//            moon->move(glm::vec3(0.0,-2.0,2.0));
+//            objects.push_back(moon);
+//
+//            auto metalSphere = std::make_shared<scene::Object>("../../assets/objects/basic_geo/sphere.obj");
+//            metalSphere->setSpecular(0.92);
+//            metalSphere->setColor(glm::vec3(0.7, 1.1, 0.6));
+//            metalSphere->scale(0.7);
+//            metalSphere->setMetallic(0.94);
+//            metalSphere->move(glm::vec3(5.0,-2.1,-3.3));
+//            objects.push_back(metalSphere);
+//
+//            auto holeSphere = std::make_shared<scene::Object>("../../assets/objects/basic_geo/hole_sphere.obj");
+//            holeSphere->setSpecular(0.4);
+//            holeSphere->setColor("../../assets/textures/basic/sphere_hole_color.png");
+//            holeSphere->scale(13.5);
+//            holeSphere->move(glm::vec3(0.0,2.1,-12.3));
+//            objects.push_back(holeSphere);
 
-            scene::Object moon("../../assets/objects/basic_geo/moon.obj");
-            moon.setSpecular(0.8);
-            moon.setColor("../../assets/textures/basic/moon.png");
-            moon.scale(0.015);
-            moon.move(glm::vec3(0.0,-2.3,1.0));
-            objects.push_back(moon);
+            std::vector<std::shared_ptr<scene::AreaLight>> lights = {};
+            // takes in intensity, color, if it's two sided, and path (optional, defaults to square)
 
-            scene::Object metalSphere("../../assets/objects/basic_geo/sphere.obj");
-            metalSphere.setSpecular(0.08);
-            metalSphere.setColor(glm::vec3(0.7, 1.0, 0.6));
-            metalSphere.scale(0.5);
-            metalSphere.setMetallic(0.94);
-            metalSphere.move(glm::vec3(4.0,-2.3,-3.3));
-            objects.push_back(metalSphere);
-
-//            scene::Object sphere2("../../assets/objects/basic_geo/sphere.obj");
-//            sphere2.setSpecular(0.1);
-//            sphere2.setColor(glm::vec3(0.7));
-//            sphere2.scale(0.5);
-//            sphere2.move(glm::vec3(-3.0,-2.5,1.5));
-//            objects.push_back(sphere2);
-
-            std::vector<scene::AreaLight> lights = {};
-            // takes in intensity and color   //payload.roughness = ToLinear(payload.roughness);
-
-            scene::AreaLight light1(4.0, glm::vec3(1.0), false);
-            light1.scale(glm::vec3(4.0,2.0,1.0));
-            light1.move(glm::vec3(9.0,-2.0,0.0));
-            light1.rotate(glm::vec3(0.0,90.0,0.0));
-            light1.rotate(glm::vec3(0.0,0.0,165.0));
+            auto light1 = std::make_shared<scene::AreaLight>(9.0, glm::vec3(0.8,0.5, 0.2), false); // THIS ONE
+            light1->move(glm::vec3(-1600.0,2500.5,-500.0));
+            light1->scale(glm::vec3(1300.0,750.5,100.0));
+            light1->rotate(glm::vec3(0.0,90.0,0.0));
+            light1->rotate(glm::vec3(0.0,0.0,55.0));
             lights.push_back(light1);
 
-            scene::AreaLight light2(4.0, glm::vec3(1.0,1.0, 0.5), false);
-            light2.scale(glm::vec3(4.0,2.0,1.0));
-            light2.move(glm::vec3(-11.0,-2.0,0.0));
-            light2.rotate(glm::vec3(0.0,90.0,0.0));
-            light2.rotate(glm::vec3(0.0,0.0,15.0));
+            auto light2 = std::make_shared<scene::AreaLight>(3.0, glm::vec3(0.3,0.3, 0.5), false); // THIS ONE
+            light2->move(glm::vec3(-1600.0,200.5,-400.0));
+            light2->scale(glm::vec3(500.0,200.5,100.0));
+            light2->rotate(glm::vec3(0.0,135.0,0.0));
+            light2->rotate(glm::vec3(0.0,0.0,0.0));
             lights.push_back(light2);
 
+//            auto light2 = std::make_shared<scene::AreaLight>(2.0, glm::vec3(0.3,0.3, 1.0), false);
+//            light2->move(glm::vec3(-800.0,100.5,0.0));
+//            light2->scale(glm::vec3(600.0,200.5,100.0));
+//            light2->rotate(glm::vec3(0.0,90.0,0.0));
+//            lights.push_back(light2);
 
-            auto sceneInfo = std::move(app::setup::CreateScene::createSceneFromObjectsAndLights(*device_, commandPool, objects, lights));
+//            auto light1 = std::make_shared<scene::AreaLight>(2.0, glm::vec3(1.0,1.0, 1.0), false);
+//            light1->scale(glm::vec3(4.0,2.5,1.0));
+//            light1->move(glm::vec3(8.0,-1.5,0.0));
+//            light1->rotate(glm::vec3(0.0,90.0,0.0));
+//            light1->rotate(glm::vec3(0.0,0.0,165.0));
+//            lights.push_back(light1);
+//
+////
+//            auto light2 = std::make_shared<scene::AreaLight>(2.0, glm::vec3(1.0,1.0, 0.2), false);
+//            light2->scale(glm::vec3(4.0,2.5,1.0));
+//            light2->move(glm::vec3(-10.0,-1.5,0.0));
+//            light2->rotate(glm::vec3(0.0,90.0,0.0));
+//            light2->rotate(glm::vec3(0.0,0.0,15.0));
+//            lights.push_back(light2);
+//
+//
+//            auto sphereLight = std::make_shared<scene::AreaLight>(2.5, glm::vec3(1.0,1.0, 1.0), false,false, "../../assets/objects/lights/sphere.obj");
+//            sphereLight->move(glm::vec3(0.0, 2.5, -12.0));
+//            sphereLight->scale(glm::vec3(0.5,0.5,0.5));
+//            lights.push_back(sphereLight);
+
+
+            std::vector<std::pair<std::string, std::string>> objMtlPairs = {
+                    {"../../assets/bistro/Exterior/exterior.obj", "../../assets/bistro/Exterior/"}
+            };
+
+            auto sceneInfo = app::setup::CreateScene::createSceneFromObjectsAndLights(*device_, commandPool, objects, objMtlPairs, lights);
             auto descriptorTextures = std::move(sceneInfo.descriptorTextures);
 
-            auto geometryInfo = std::move(sceneInfo.geoReturnInfo);
+            auto& geometryInfo = sceneInfo.geoReturnInfo;
             std::vector<glm::vec3>                     vertexPositions = geometryInfo.vertexPositions;
             std::vector<scene::geometry::Vertex>       vertices = geometryInfo.vertices;
             std::vector<uint32_t>                      indices = geometryInfo.indices;
@@ -226,9 +266,9 @@ export namespace app {
             std::vector<vulkan::memory::Buffer::FillRegion> lightInfoDataRegions {
                     {lightInfos.data() , lightInfosSize, 0},
             };
-            vulkan::memory::Buffer lightInfoBuffer = vulkan::memory::Buffer::createDeviceLocalBuffer(commandPool, *device_, lightInfosSize,
-                                                                                                     vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress
-                                                                                                     | vk::BufferUsageFlagBits::eTransferDst, lightInfoDataRegions);
+            vulkan::memory::Buffer lightInfoBuffer (*device_, lightInfosSize,vk::BufferUsageFlagBits::eStorageBuffer,
+                                                    vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+            lightInfoBuffer.fill(lightInfoDataRegions);
 
             // Create two descriptor sets, one used in only the raytracing pipeline
             // and one that is also accessed in the compute pipeline
@@ -238,7 +278,6 @@ export namespace app {
             std::vector<std::vector<vk::DescriptorPoolSize>> poolGroups = {};
 
             // add images used for rendering to the ray and compute layout
-            // TODO fix this becuase not all are used in the RayGen/Compute
             for (int i = 0; i < renderImages.size(); ++i) {
                 rayAndComputeLayout.addBinding(i, vk::DescriptorType::eStorageImage,  vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eCompute);
             }
@@ -248,10 +287,10 @@ export namespace app {
             // add everything needed for the ray tracing layout
             rayTraceOnlyLayout.addBinding(0, vk::DescriptorType::eAccelerationStructureKHR, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR);  // TLAS
             rayTraceOnlyLayout.addBinding(1, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR);  // camera
-            rayTraceOnlyLayout.addBinding(2, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR); // vertex buffer
-            rayTraceOnlyLayout.addBinding(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eClosestHitKHR); // index buffer
-            rayTraceOnlyLayout.addBinding(4, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR, static_cast<uint32_t>(descriptorTextures.size())); // textures
-            rayTraceOnlyLayout.addBinding(5, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR); //object infos
+            rayTraceOnlyLayout.addBinding(2, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eAnyHitKHR); // vertex buffer
+            rayTraceOnlyLayout.addBinding(3, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eAnyHitKHR); // index buffer
+            rayTraceOnlyLayout.addBinding(4, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eAnyHitKHR, static_cast<uint32_t>(descriptorTextures.size())); // textures
+            rayTraceOnlyLayout.addBinding(5, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eAnyHitKHR); //object infos
             rayTraceOnlyLayout.addBinding(6, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR); // light infos
             rayTraceOnlyLayout.addBinding(7, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eMissKHR); // hdri
             rayTraceOnlyLayout.build();
@@ -283,22 +322,35 @@ export namespace app {
             std::vector<vk::DescriptorSetLayout> raytraceLayouts{rayAndComputeLayout.get(), rayTraceOnlyLayout.get()};
 
             auto raytracePipeline = vulkan::RayTracingPipeline(*device_, raytraceLayouts, "shaders/spv/raygen.rgen.spv",
-                                                               "shaders/spv/miss.rmiss.spv", "shaders/spv/shadowMiss.rmiss.spv",
-                                                               "shaders/spv/closesthit.rchit.spv");
+                                                               "shaders/spv/miss.rmiss.spv",
+                                                               "shaders/spv/closesthit.rchit.spv", "shaders/spv/opacity.rahit.spv");
 
             std::vector<vk::DescriptorSetLayout> computeLayouts{rayAndComputeLayout.get()};
-            auto denoisePipeline = vulkan::ComputePipeline(*device_, computeLayouts, "shaders/spv/denoise.comp.spv");
-            auto combinePipeline = vulkan::ComputePipeline(*device_, computeLayouts, "shaders/spv/combine.comp.spv");
+            auto denoisePipeline = vulkan::ComputePipeline(*device_, computeLayouts, "shaders/spv/denoise.comp.spv", true, sizeof(DenoisingInfo));
+            auto combinePipeline = vulkan::ComputePipeline(*device_, computeLayouts, "shaders/spv/combine.comp.spv", true, sizeof(int));
 
             int frame = 0;
             float currentTime = window_->getTime();
             uint32_t imageIndex = 0;
-            vk::UniqueSemaphore imageAcquiredSemaphore = device_->get().createSemaphoreUnique(vk::SemaphoreCreateInfo());
+
+            uint32_t groupCountX = (extent.width  + 7) / 8;
+            uint32_t groupCountY = (extent.height + 7) / 8;
 
             scene::SceneInfo sceneData(frame, lights.size(), camera_->getPosition());
 
-            // Main Loop
+            const int numCmdBufsNeeded = 1 /*raytrace*/ + 2 /*denoise*/ + 1 /*combine*/;
+            auto cmdBuffers = commandPool.allocateCommandBuffers(numCmdBufsNeeded);
+
+            auto& raytraceCmd = cmdBuffers[0];
+            auto& denoiseCmd1 = cmdBuffers[1];
+            auto& denoiseCmd2 = cmdBuffers[2];
+            auto& combineCmd = cmdBuffers[3];
+
+            vk::UniqueSemaphore imageAcquiredSemaphore = device_->get().createSemaphoreUnique({});
+
+
             while (!window_->shouldClose()) {
+                device_->get().waitIdle();
                 float newTime = window_->getTime();
                 float frameTime = newTime - currentTime;
                 currentTime = newTime;
@@ -306,62 +358,128 @@ export namespace app {
                 glfwPollEvents();
                 window_->processInput(newTime, CAM_SPEED);
 
-                imageIndex = swapchain_->acquireNextImage(imageAcquiredSemaphore);
+                // === Raytrace ===
+                raytraceCmd->reset();
+                raytraceCmd->begin({ vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
+                raytraceCmd->bindPipeline(vk::PipelineBindPoint::eRayTracingKHR, raytracePipeline.get());
+                raytraceCmd->bindDescriptorSets(vk::PipelineBindPoint::eRayTracingKHR, raytracePipeline.getLayout(), 0, rayAndComputeSet, nullptr);
+                raytraceCmd->bindDescriptorSets(vk::PipelineBindPoint::eRayTracingKHR, raytracePipeline.getLayout(), 1, rayTraceSet, nullptr);
 
-                auto cmd = commandPool.getSingleUseBuffer();
-                cmd->bindPipeline(vk::PipelineBindPoint::eRayTracingKHR, raytracePipeline.get());
-                cmd->bindDescriptorSets(vk::PipelineBindPoint::eRayTracingKHR, raytracePipeline.getLayout(), 0, rayAndComputeSet, nullptr);
-                cmd->bindDescriptorSets(vk::PipelineBindPoint::eRayTracingKHR, raytracePipeline.getLayout(), 1,      rayTraceSet, nullptr);
                 sceneData.frame = frame;
                 sceneData.camPosition = camera_->getPosition();
-                cmd->pushConstants<scene::SceneInfo>(raytracePipeline.getLayout(),vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR, 0, sceneData);
-                raytracePipeline.recordTraceRays(*cmd, extent);
+                raytraceCmd->pushConstants<scene::SceneInfo>(
+                        raytracePipeline.getLayout(),
+                        vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eAnyHitKHR,
+                        0, sceneData
+                );
 
-                // Denoise the sampled images
-                int computeImageIndex = 0;
-                cmd->bindPipeline(vk::PipelineBindPoint::eCompute, denoisePipeline.get());
-                cmd->bindDescriptorSets(vk::PipelineBindPoint::eCompute, denoisePipeline.getLayout(), 0, rayAndComputeSet, nullptr);
-                cmd->pushConstants(denoisePipeline.getLayout(), vk::ShaderStageFlagBits::eCompute, 0, sizeof(int), &computeImageIndex);
+                raytracePipeline.recordTraceRays(*raytraceCmd, extent);
+                raytraceCmd->end();
 
-                // Tell the compute shader how many different work groups to run, 8 wide is set in the shader
-                uint32_t groupCountX = (extent.width  + 7) / 8;
-                uint32_t groupCountY = (extent.height + 7) / 8;
-                cmd->dispatch(groupCountX, groupCountY, 1);
+                vk::SubmitInfo raytraceSubmit = {};
+                //raytraceSubmit.waitSemaphoreCount = 1;
+                //raytraceSubmit.pWaitSemaphores = &combineFinishedSemaphore.get();
+                //vk::PipelineStageFlags waitStage = vk::PipelineStageFlagBits::eComputeShader;
+                //raytraceSubmit.pWaitDstStageMask = &waitStage;
+                raytraceSubmit.commandBufferCount = 1;
+                raytraceSubmit.pCommandBuffers = &raytraceCmd.get();
+                //raytraceSubmit.signalSemaphoreCount = 1;
+                //raytraceSubmit.pSignalSemaphores = &raytraceDoneSemaphore.get();
 
-                computeImageIndex = 1;
-                cmd->pushConstants(denoisePipeline.getLayout(), vk::ShaderStageFlagBits::eCompute, 0, sizeof(int), &computeImageIndex);
-                cmd->dispatch(groupCountX, groupCountY, 1);
+                device_->computeQueue().submit(raytraceSubmit);
 
-                // Finally, combine the images
-                cmd->bindPipeline(vk::PipelineBindPoint::eCompute, combinePipeline.get());
-                cmd->bindDescriptorSets(vk::PipelineBindPoint::eCompute, combinePipeline.getLayout(), 0, rayAndComputeSet, nullptr);
-                cmd->dispatch(groupCountX, groupCountY, 1);
+                // === Denoise Passes ===
+                int denoisingOutput = 1;
+                int finalSemaphoreIndex = 0;
+
+                for (int i = 0; i < NUM_DENOISING_ITERATIONS; ++i) {
+                    device_->get().waitIdle();
+
+                    auto& denoiseCmd = (i % 2 == 0) ? denoiseCmd1 : denoiseCmd2;
+
+                    denoiseCmd->reset();
+                    denoiseCmd->begin({ vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
+
+                    denoiseCmd->bindPipeline(vk::PipelineBindPoint::eCompute, denoisePipeline.get());
+                    denoiseCmd->bindDescriptorSets(vk::PipelineBindPoint::eCompute, denoisePipeline.getLayout(), 0, rayAndComputeSet, nullptr);
+
+                    DenoisingInfo denoiseInfo((i + 1) * DENOISING_STRENGTH, 1.0f, 0.001f, 0.001f, denoisingOutput, 0);
+                    denoiseCmd->pushConstants(denoisePipeline.getLayout(), vk::ShaderStageFlagBits::eCompute, 0, sizeof(DenoisingInfo), &denoiseInfo);
+                    denoiseCmd->dispatch(groupCountX, groupCountY, 1);
+
+                    denoiseInfo.isShadowedImage = 1;
+                    denoiseCmd->pushConstants(denoisePipeline.getLayout(), vk::ShaderStageFlagBits::eCompute, 0, sizeof(DenoisingInfo), &denoiseInfo);
+                    denoiseCmd->dispatch(groupCountX, groupCountY, 1);
+
+                    denoiseCmd->end();
+
+                    // Fixed semaphore logic - each iteration signals the SAME semaphore that the next will wait on
+                    uint32_t currentSemaphoreIndex = i % 2;
+                    uint32_t nextSemaphoreIndex = (i + 1) % 2;
+                    finalSemaphoreIndex = currentSemaphoreIndex; // Track which semaphore the final iteration signals
+
+                    vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eComputeShader };
+                    vk::PipelineStageFlags waitStagesRay[] = { vk::PipelineStageFlagBits::eRayTracingShaderKHR };
+
+                    // Capture the command buffer reference to avoid issues with changing references
+                    vk::CommandBuffer cmdBuf = denoiseCmd.get();
+
+                    vk::SubmitInfo denoiseSubmit = {};
+                    denoiseSubmit.commandBufferCount = 1;
+                    denoiseSubmit.pCommandBuffers = &cmdBuf;
+
+                    device_->computeQueue().submit(denoiseSubmit);
+
+                    denoisingOutput = 1 - denoisingOutput;
+                }
+
+                // === Combine Pass ===
+                device_->get().waitIdle();
+
+                combineCmd->reset();
+                combineCmd->begin({ vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
+
+                combineCmd->bindPipeline(vk::PipelineBindPoint::eCompute, combinePipeline.get());
+                combineCmd->bindDescriptorSets(vk::PipelineBindPoint::eCompute, combinePipeline.getLayout(), 0, rayAndComputeSet, nullptr);
+                combineCmd->pushConstants(combinePipeline.getLayout(), vk::ShaderStageFlagBits::eCompute, 0, sizeof(int), &denoisingOutput);
+                combineCmd->dispatch(groupCountX, groupCountY, 1);
+
+                // Acquire image
+                uint32_t imageIndex = swapchain_->acquireNextImage(imageAcquiredSemaphore);
 
                 vk::Image srcImage = finalImage.getImage();
                 vk::Image dstImage = swapchain_->getImage(imageIndex);
-                vulkan::memory::Image::setImageLayout(*cmd, srcImage, vk::ImageLayout::eGeneral, vk::ImageLayout::eTransferSrcOptimal);
-                vulkan::memory::Image::setImageLayout(*cmd, dstImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
-                vulkan::memory::Image::copyImage(*cmd, srcImage, dstImage, extent);
-                vulkan::memory::Image::setImageLayout(*cmd, srcImage, vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eGeneral);
-                vulkan::memory::Image::setImageLayout(*cmd, dstImage, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::ePresentSrcKHR);
 
-                commandPool.submitSingleUse(std::move(cmd), device_->computeQueue());
-                device_->get().waitIdle();
+                vulkan::memory::Image::setImageLayout(*combineCmd, srcImage, vk::ImageLayout::eGeneral, vk::ImageLayout::eTransferSrcOptimal);
+                vulkan::memory::Image::setImageLayout(*combineCmd, dstImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+                vulkan::memory::Image::copyImage(*combineCmd, srcImage, dstImage, extent);
+                vulkan::memory::Image::setImageLayout(*combineCmd, srcImage, vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eGeneral);
+                vulkan::memory::Image::setImageLayout(*combineCmd, dstImage, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::ePresentSrcKHR);
 
+                combineCmd->end();
+
+                vk::SubmitInfo combineSubmit = {};
+                combineSubmit.commandBufferCount = 1;
+                combineSubmit.pCommandBuffers = &combineCmd.get();
+
+
+                device_->computeQueue().submit(combineSubmit);
+
+                // === Present ===
                 vk::PresentInfoKHR presentInfo;
                 vk::SwapchainKHR swapchain = swapchain_->get();
                 std::vector<vk::SwapchainKHR> swapchains = { swapchain };
                 presentInfo.setSwapchains(swapchains);
                 presentInfo.setImageIndices(imageIndex);
                 presentInfo.setWaitSemaphores(*imageAcquiredSemaphore);
-                auto result = device_->presentQueue().presentKHR(presentInfo);
-                if (result != vk::Result::eSuccess) {
-                    throw std::runtime_error("failed to present.");
+
+                if (device_->presentQueue().presentKHR(presentInfo) != vk::Result::eSuccess) {
+                    throw std::runtime_error("Failed to present.");
                 }
-                // Wait Idle is slow
-                device_->presentQueue().waitIdle();
                 ++frame;
             }
+
+            device_->get().waitIdle();
             core::log::info("Main loop exited");
         }
 
@@ -376,8 +494,11 @@ export namespace app {
         std::unique_ptr<vulkan::context::Device>    device_;
         std::unique_ptr<vulkan::context::Swapchain> swapchain_;
 
-        float CAM_SPEED = 0.08f;
+        float CAM_SPEED = 10.5f;
         float MOUSE_SENSITIVITY = 0.5f;
+
+        const int NUM_DENOISING_ITERATIONS = 4;
+        const int DENOISING_STRENGTH = 1;
     };
 
 } // namespace app

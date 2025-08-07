@@ -5,11 +5,15 @@
 #include "raycommon.glsl"
 #include "cook-torrance.glsl"
 
-const uint NUM_PRIMARY_RAYS = 1u;
+const uint NUM_PRIMARY_RAYS = 4u;
+const uint NUM_SHADOW_RAYS = 3u;
+float POSITION_SCALE = 1.0;
 
 layout(set = 0, binding = 0, rgba8) uniform image2D analyticImageOut;
 layout(set = 0, binding = 1, rgba8) uniform image2D shadowedSampledImageOut;
 layout(set = 0, binding = 2, rgba8) uniform image2D unshadowedSampledImageOut;
+layout(set = 0, binding = 6, rgba8) uniform image2D normalImageOut;
+layout(set = 0, binding = 7, rgba8) uniform image2D positionImageOut;
 
 layout(set = 1, binding = 0) uniform accelerationStructureEXT topLevelAS;
 layout(set = 1, binding = 1) uniform CameraUBO {
@@ -17,6 +21,9 @@ layout(set = 1, binding = 1) uniform CameraUBO {
 };
 layout(set = 1, binding = 2) readonly buffer VertexBuffer {
     Vertex vertices[];
+};
+layout(set = 1, binding = 3) readonly buffer IndexBuffer {
+    uint indices[];
 };
 layout(set = 1, binding = 4) uniform sampler2D texSamplers[];
 layout(set = 1, binding = 5) readonly buffer ObjectInfoBuffer {
@@ -54,7 +61,6 @@ vec3 ACESFilm(vec3 x)
 
 
 layout(location = 0) rayPayloadEXT HitInfo payload;
-layout(location = 1) rayPayloadEXT bool isShadowed;
 
 const float LUT_SIZE  = 64.0;
 const float LUT_SCALE = (LUT_SIZE - 1.0)/LUT_SIZE;
@@ -67,7 +73,10 @@ void main() {
     vec3 analyticColor = vec3(0.0);
     vec3 unshadowedSampledColor = vec3(0.0);
     vec3   shadowedSampledColor = vec3(0.0);
-    vec3 normal = vec3(0.0);
+    vec3 avgNormal = vec3(0.0);
+    vec3 avgPosition = vec3(0.0);
+    float roughness;
+
 
     for (uint i = 0; i < NUM_PRIMARY_RAYS; i++) {
         //jitter ray target within each pixel
@@ -85,20 +94,23 @@ void main() {
         payload.hitPoint = vec3(0.0);
         payload.normal = vec3(0.0);
         payload.missed = false;
+        payload.isShadowRay = false;
 
         traceRayEXT(
             topLevelAS,
-            gl_RayFlagsOpaqueEXT,
+            gl_RayFlagsNoneEXT,
             0xFF,
             0, 0, 0,
             rayOrigin, 0.001,
             rayDirection, 10000.0,
             0
         );
+
+
         if (payload.missed) {
-            analyticColor += vec3(0.0);
-            unshadowedSampledColor += vec3(0.0);
-            shadowedSampledColor += vec3(0.0);
+            analyticColor += payload.color;
+            unshadowedSampledColor += payload.color;
+            shadowedSampledColor += payload.color;
             continue;
         }
         if (payload.hitLight) {
@@ -108,12 +120,17 @@ void main() {
             continue;
         }
 
+
+
         vec3 hitPoint         = payload.hitPoint;
         vec3 hitNormal        = payload.normal;
-        vec3 viewDir          = normalize(sceneData.camPosition - hitPoint);
-        float roughness       = payload.roughness;
+        vec3 viewDir          = normalize(cam.position - hitPoint);
+        roughness       = payload.roughness;
         float metallic        = payload.metallic;
         vec3 color            = payload.color;
+
+        avgNormal += hitNormal;
+        avgPosition += hitPoint;
 
         vec3 mDiffuse = (1.0 - metallic) * color;
         vec3 mSpecular = mix(vec3(0.04), color, metallic);
@@ -148,123 +165,177 @@ void main() {
         for (uint i = 0; i < sceneData.numLights; ++i) {
            LightInfo currLight = lightInfos[i];
 
-           uint lightVertexOffset = currLight.vertexOffset;
-
-           Vertex lv0 = vertices[lightVertexOffset + 0];
-           Vertex lv1 = vertices[lightVertexOffset + 1];
-           Vertex lv2 = vertices[lightVertexOffset + 2];
-           Vertex lv3 = vertices[lightVertexOffset + 3];
-
-           mat4 lightTransform = currLight.transform;
-
-           vec3 translatedPoints[4];
-           translatedPoints[0] = (lightTransform * vec4(lv0.position, 1.0)).xyz;
-           translatedPoints[1] = (lightTransform * vec4(lv1.position, 1.0)).xyz;
-           translatedPoints[2] = (lightTransform * vec4(lv2.position, 1.0)).xyz;
-           translatedPoints[3] = (lightTransform * vec4(lv3.position, 1.0)).xyz;
-
-           const uint numShadowSamples = 64;
-           float shadowFactor = 0.0;
-
            vec3 shadowedSample = vec3(0.0);
            vec3 unshadowedSample = vec3(0.0);
+           
 
-           // cast shadow rays
-           for (uint s = 0; s < numShadowSamples; ++s) {
-               // Compute shadow ray direction towards some point on the area light
-               // For now, just pick a simple center or random point on the light
-               uvec2 pixel = gl_LaunchIDEXT.xy;
-               uint seed = s + pixel.x * 733 + pixel.y * 1933;
-               float r1 = random(seed);
-               float r2 = random(seed + 100);
+           for (uint i = 0; i < currLight.numTriangles; ++i) {
+               uint vertexOffset = currLight.vertexOffset;
+               uint indexOffset = currLight.indexOffset;
 
-               bool useSecondTriangle = (random(s + 64) > 0.5);
+               uint index0 = indices[(i * 3) + 0 + indexOffset];
+               uint index1 = indices[(i * 3)+ 1 + indexOffset];
+               uint index2 = indices[(i * 3) + 2 + indexOffset];
 
-               vec3 lightSamplePos = vec3(0.0);
+               Vertex v0 = vertices[index0 + vertexOffset];
+               Vertex v1 = vertices[index1 + vertexOffset];
+               Vertex v2 = vertices[index2 + vertexOffset];
 
-               if (!useSecondTriangle) {
-                   // Triangle 1: translatedPoints[0], translatedPoints[1], translatedPoints[2]
+               mat4 lightTransform = currLight.transform;
+
+               vec3 translatedPoints[3];
+               translatedPoints[0] = (lightTransform * vec4(v0.position, 1.0)).xyz;
+               translatedPoints[1] = (lightTransform * vec4(v1.position, 1.0)).xyz;
+               translatedPoints[2] = (lightTransform * vec4(v2.position, 1.0)).xyz;
+
+
+               vec3 lightNormal = cross(translatedPoints[2] - translatedPoints[1], translatedPoints[0] - translatedPoints[1]);
+               float area = length(lightNormal) * 0.5;
+               float pdf = 1.0 / (area * 0.7);
+               lightNormal = normalize(lightNormal);
+
+                if (!currLight.isTwoSided) {
+                    if (dot(lightNormal, hitPoint - translatedPoints[0]) < 0.0) {
+                        continue;
+                   }
+                }
+
+               float shadowFactor = 0.0;
+
+               // cast shadow rays
+               for (uint s = 0; s < NUM_SHADOW_RAYS; ++s) {
+                   // Compute shadow ray direction towards some point on the triangle
+                   uvec2 pixel = gl_LaunchIDEXT.xy;
+                   uint seed = s + pixel.x * 733 + pixel.y * 1933 + sceneData.frame;
+                   float r1 = random(seed);
+                   float r2 = random(seed + 100);
+
+                   vec3 lightSamplePos = vec3(0.0);
+
                    if (r1 + r2 > 1.0) {
                        r1 = 1.0 - r1;
                        r2 = 1.0 - r2;
                    }
                    lightSamplePos = translatedPoints[0] + r1 * (translatedPoints[1] - translatedPoints[0]) + r2 * (translatedPoints[2] - translatedPoints[0]);
-               } else {
-                       // Triangle 2: translatedPoints[0], translatedPoints[2], translatedPoints[3]unshadowedSampledImageOut
-                       if (r1 + r2 > 1.0) {
-                           r1 = 1.0 - r1;
-                           r2 = 1.0 - r2;
-                       }
-                       lightSamplePos = translatedPoints[0] + r1 * (translatedPoints[2] - translatedPoints[0]) + r2 * (translatedPoints[3] - translatedPoints[0]);
+
+                   vec3 sampledLightDir = normalize(lightSamplePos - hitPoint);
+                   float lightDistance = length(lightSamplePos - hitPoint);
+
+                   vec3 shadowRayOrigin = hitPoint + hitNormal * 0.01;
+
+                   uint shadowFlags = gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT;
+
+                   payload.missed = false;
+                   payload.isShadowRay = true;
+
+                   traceRayEXT(
+                       topLevelAS,
+                       shadowFlags,
+                       0xFF,
+                       0, 0, 0,
+                       shadowRayOrigin,
+                       0.001,
+                       sampledLightDir,
+                       lightDistance - 0.5,
+                       0 // reuse the ray, using the missed
+                   );
+
+                   // if any hit, missed will be false, so it only adds when not shadowed
+                   float currShadow = payload.missed ? 1.0 : 0.0;
+                   shadowFactor += currShadow;
+
+                   vec3 halfVector = normalize(viewDir + sampledLightDir);
+
+                   vec3 F0 = mSpecular;
+                   float cosTheta = clamp(dot(viewDir, halfVector), 0.0, 1.0);
+
+                   float D = GGX_Distribution(hitNormal, halfVector, roughness);
+                   float G = GGX_PartialGeometryTerm(viewDir, hitNormal, halfVector, roughness) * GGX_PartialGeometryTerm(sampledLightDir, hitNormal, halfVector, roughness);
+                   vec3 F = Fresnel_Schlick(cosTheta, F0);
+
+                   float NdotV = max(dot(hitNormal, viewDir), 0.1);
+                   float NdotL = max(dot(hitNormal, sampledLightDir), 0.1);
+
+                   vec3 currSpecular = (D * F * G) / (4.0 * NdotV * NdotL);
+                   vec3 currDiffuse = (1.0 - metallic) * color / PI; // Lambert diffuse term
+
+                   vec3 lightVec = lightSamplePos - hitPoint;
+                   float distance = length(lightVec);
+                   float attenuation = 1.0 / (distance * distance);
+
+                   vec3 BRDF = currSpecular + currDiffuse;
+                   vec3 L = currLight.color * currLight.intensity * NdotL * attenuation * 10.0;
+
+                   shadowedSample   += currShadow * BRDF * L / pdf;
+                   unshadowedSample += BRDF * L / pdf;
                }
+               shadowedSample   /= float(NUM_SHADOW_RAYS);
+               unshadowedSample /= float(NUM_SHADOW_RAYS);
 
+               bool twoSided = currLight.isTwoSided;
 
-               vec3 sampledLightDir = normalize(lightSamplePos - hitPoint);
-               float lightDistance = length(lightSamplePos - hitPoint);
+               diffuse = LTC_Evaluate(N, V, P, mat3(1), translatedPoints, lightNormal, twoSided);
+               specular = LTC_Evaluate(N, V, P, Minv, translatedPoints, lightNormal, twoSided);
 
-               vec3 shadowRayOrigin = hitPoint + hitNormal * 0.01;
+               vec3 fresnel = mSpecular * t2.x + (vec3(1.0) - mSpecular) * t2.y;
+               specular *= fresnel;
 
-               // Reset shadow payload before trace
-               isShadowed = true;
-
-               uint shadowFlags = gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT | gl_RayFlagsSkipClosestHitShaderEXT;
-
-               traceRayEXT(
-                   topLevelAS,
-                   shadowFlags,
-                   0xFF,
-                   0, 0, 1,
-                   shadowRayOrigin,
-                   0.001,
-                   sampledLightDir,
-                   lightDistance - 0.5,
-                   1 // location of shadow ray payload
-               );
-
-               // if any hit, isShadowed will be true, so shadowFactor only adds when not shadowed
-               float currShadow = isShadowed ? 0.0 : 1.0;
-               shadowFactor += currShadow;
-
-               vec3 halfVector = normalize(viewDir + sampledLightDir);
-
-               vec3 F0 = mSpecular;
-               float cosTheta = clamp(dot(viewDir, halfVector), 0.0, 1.0);
-
-               float D = GGX_Distribution(hitNormal, halfVector, roughness);
-               float G = GGX_PartialGeometryTerm(viewDir, hitNormal, halfVector, roughness) * GGX_PartialGeometryTerm(sampledLightDir, hitNormal, halfVector, roughness);
-               vec3 F = Fresnel_Schlick(cosTheta, F0);
-
-               float NdotV = max(dot(hitNormal, viewDir), 0.0001);
-               float NdotL = max(dot(hitNormal, sampledLightDir), 0.0001);
-
-               vec3 currSpecular = (D * F * G) / (4.0 * NdotV * NdotL);
-               vec3 currDiffuse = (1.0 - metallic) * color / PI; // Lambert diffuse term
-
-               vec3 lightVec = lightSamplePos - hitPoint;
-               float distance = length(lightVec);
-               float attenuation = 1.0 / (distance * distance);
-
-               vec3 BRDF = currSpecular + currDiffuse;
-               vec3 L = currLight.color * currLight.intensity * NdotL * attenuation * 40.0;
-
-               shadowedSample   += currShadow * BRDF * L;
-               unshadowedSample += BRDF * L;
+               analyticColor += currLight.color * currLight.intensity * (specular + mDiffuse * diffuse) * 5.0;
+               shadowedSampledColor += shadowedSample;
+               unshadowedSampledColor += unshadowedSample;
            }
-           shadowedSample   /= float(numShadowSamples);
-           unshadowedSample /= float(numShadowSamples);
-
-           bool twoSided = currLight.isTwoSided;
-
-           diffuse = LTC_Evaluate(N, V, P, mat3(1), translatedPoints, twoSided);
-           specular = LTC_Evaluate(N, V, P, Minv, translatedPoints, twoSided);
-
-           vec3 fresnel = mSpecular * t2.x + (vec3(1.0) - mSpecular) * t2.y;
-           specular *= fresnel;
-
-           analyticColor += currLight.color * currLight.intensity * (specular + mDiffuse * diffuse) * 5.0;
-           shadowedSampledColor += shadowedSample;
-           unshadowedSampledColor += unshadowedSample;
        }
+       // Add Direct Lighting
+      vec3 directLightDir = normalize(vec3(-1.0, 1.0, -0.5));
+      vec3 directLightColor = vec3(1.0, 1.0, 0.5);
+      float directLightIntensity = 0.2;
+
+      if (dot(hitNormal, directLightDir) <= 0.0) {
+          continue;
+      }
+
+      vec3 shadowRayOrigin = hitPoint + hitNormal * 0.01;
+
+      uint shadowFlags = gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT;
+
+      payload.missed = false;
+
+      traceRayEXT(
+          topLevelAS,
+          shadowFlags,
+          0xFF,
+          0, 0, 0,
+          shadowRayOrigin,
+          0.001,
+          directLightDir,
+          10000.0,
+          0 // reuse the ray, using the missed
+      );
+
+      // if any hit, missed will be false, so it only adds when not shadowed
+      float currShadow = payload.missed ? 1.0 : 0.0;
+
+      vec3 halfVector = normalize(viewDir + directLightDir);
+
+      vec3 F0 = mSpecular;
+      float cosTheta = clamp(dot(viewDir, halfVector), 0.0, 1.0);
+
+      float D = GGX_Distribution(hitNormal, halfVector, roughness);
+      float G = GGX_PartialGeometryTerm(viewDir, hitNormal, halfVector, roughness) * GGX_PartialGeometryTerm(directLightDir, hitNormal, halfVector, roughness);
+      vec3 F = Fresnel_Schlick(cosTheta, F0);
+
+      float NdotV = max(dot(hitNormal, viewDir), 5.0);
+      float NdotL = max(dot(hitNormal, directLightDir), 0.0001);
+
+      vec3 currSpecular = (D * F * G) / (4.0 * NdotV * NdotL);
+      vec3 currDiffuse = (1.0 - metallic) * color / PI; // Lambert diffuse term
+
+      vec3 BRDF = currSpecular + currDiffuse;
+      vec3 L = directLightColor * directLightIntensity * NdotL * 20.0;
+
+      shadowedSampledColor   += currShadow * BRDF * L;
+      unshadowedSampledColor += BRDF * L;
+      analyticColor += BRDF * L;
     }
 
     shadowedSampledColor /= float(NUM_PRIMARY_RAYS);
@@ -280,9 +351,16 @@ void main() {
     shadowedSampledColor = ACESFilm(shadowedSampledColor);
     shadowedSampledColor = ToSRGB(shadowedSampledColor);
 
-
+    //imageStore(analyticImageOut, pixelCoord, vec4(roughness,roughness,roughness, 1.0));
     imageStore(analyticImageOut, pixelCoord, vec4(analyticColor.b, analyticColor.g, analyticColor.r, 1.0));
     imageStore(shadowedSampledImageOut, pixelCoord, vec4(shadowedSampledColor.b, shadowedSampledColor.g, shadowedSampledColor.r, 1.0));
     imageStore(unshadowedSampledImageOut, pixelCoord, vec4(unshadowedSampledColor.b, unshadowedSampledColor.g, unshadowedSampledColor.r, 1.0));
+
+    avgNormal = normalize(avgNormal / float(NUM_PRIMARY_RAYS)); // Adjust this to fit your scene
+    avgPosition /= float(NUM_PRIMARY_RAYS);
+    vec3 normalizedPos = avgPosition * POSITION_SCALE;
+
+    imageStore(normalImageOut, pixelCoord, vec4(avgNormal.b, avgNormal.g, avgNormal.r, 1.0));
+    imageStore(positionImageOut, pixelCoord, vec4(normalizedPos.b, normalizedPos.g, normalizedPos.r, 1.0));
 
 }

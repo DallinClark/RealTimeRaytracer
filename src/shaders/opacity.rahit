@@ -1,0 +1,64 @@
+#version 460
+#extension GL_EXT_ray_tracing : require
+#extension GL_EXT_nonuniform_qualifier : enable
+
+hitAttributeEXT vec2 attribs;
+#include "raycommon.glsl"
+
+layout(location = 0) rayPayloadInEXT HitInfo payload;
+
+layout(set = 1, binding = 2) readonly buffer VertexBuffer {
+    Vertex vertices[];
+};
+
+layout(set = 1, binding = 3) readonly buffer IndexBuffer {
+    uint indices[];
+};
+layout(set = 1, binding = 4) uniform sampler2D texSamplers[];
+layout(set = 1, binding = 5) readonly buffer ObjectInfoBuffer {
+    ObjectInfo objectInfos[];
+};
+layout( push_constant ) uniform constants
+{
+	uint frame;
+	uint numLights;
+    uint _pad0; // 0 is primary, 1 is shadow
+    uint _pad1;
+	vec3 camPosition;
+	float padding_;
+} sceneData;
+
+void main() {
+    // Retrieve object info
+    uint objIndex = gl_InstanceCustomIndexEXT - sceneData.numLights;
+    ObjectInfo objectInfo = objectInfos[objIndex];
+
+    if (objectInfo.usesOpacityMap == 0) {
+        return;
+    }
+
+
+    uint vertexOffset = objectInfo.vertexOffset;
+    uint indexOffset = objectInfo.indexOffset;
+
+    uint index0 = indices[3 * gl_PrimitiveID + 0 + indexOffset];
+    uint index1 = indices[3 * gl_PrimitiveID + 1 + indexOffset];
+    uint index2 = indices[3 * gl_PrimitiveID + 2 + indexOffset];
+
+    Vertex v0 = vertices[index0 + vertexOffset];
+    Vertex v1 = vertices[index1 + vertexOffset];
+    Vertex v2 = vertices[index2 + vertexOffset];
+
+    vec3 bary = vec3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
+    vec2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
+
+    float opacity = texture(nonuniformEXT(texSamplers[objectInfo.opacityIndex]), uv).r;
+
+
+    // If opacity low, ignore this intersection and continue tracing
+    if (opacity < 0.9) {
+        ignoreIntersectionEXT;
+    }
+
+    // Else, accept intersection (do nothing)
+}

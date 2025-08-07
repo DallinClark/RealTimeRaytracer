@@ -37,4 +37,17 @@ export namespace core::utils {
 
         return matrix;
     }
+
+    inline vk::TransformMatrixKHR PackTransformMatrix(const glm::mat4& matrix) {
+        vk::TransformMatrixKHR result{};
+
+        for (int i = 0; i < 3; ++i) {
+            result.matrix[i][0] = matrix[i][0];  // X
+            result.matrix[i][1] = matrix[i][1];  // Y
+            result.matrix[i][2] = matrix[i][2];  // Z
+            result.matrix[i][3] = matrix[i][3];  // W (translation row)
+        }
+
+        return result;
+    }
 }
