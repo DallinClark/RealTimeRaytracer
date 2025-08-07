@@ -13,6 +13,26 @@ namespace vulkan::raytracing {
 
     export class BLAS {
     public:
+        // Holds Info for each BLAS
+        struct BLASCreateInfo {
+            vk::DeviceSize vertexOffset;
+            vk::DeviceSize indexOffset;
+
+            vk::DeviceSize vertexSize;
+
+            vk::DeviceSize indexSize;
+
+            uint32_t       vertexCount;
+            uint32_t       indexCount;
+
+            uint32_t       vertexIndexOffset;
+            uint32_t       indexIndexOffset;
+
+            uint32_t       vertexStride = sizeof(glm::vec3); // or your actual vertex layout
+
+            bool           isOpaque;
+        };
+
         BLAS(
                 const context::Device& device,
                 context::CommandPool& commandPool,
@@ -23,7 +43,8 @@ namespace vulkan::raytracing {
                 uint32_t indexCount,
                 vk::IndexType indexType,
                 uint32_t vertexIndexOffset,
-                uint32_t indexIndexOffset
+                uint32_t indexIndexOffset,
+                bool isOpaque
         );
 
         const vk::AccelerationStructureKHR& get() const { return accelerationStructure_.get(); }
@@ -52,7 +73,7 @@ namespace vulkan::raytracing {
 
     // TODO USE THE MEMORY ADDRESS STUFF IN BUFFER CLASS
     BLAS::BLAS(const context::Device& device, context::CommandPool& commandPool, const vk::DeviceAddress& vertexAddress, const vk::DeviceAddress& indexAddress, uint32_t vertexCount,
-                vk::DeviceSize vertexStride, uint32_t indexCount, vk::IndexType indexType, uint32_t vertexIndexOffset, uint32_t indexIndexOffset)
+                vk::DeviceSize vertexStride, uint32_t indexCount, vk::IndexType indexType, uint32_t vertexIndexOffset, uint32_t indexIndexOffset, bool isOpaque)
                     : device_(device.get()),physicalDevice_(device.physical()), vertexIndexOffset_(vertexIndexOffset), indexCount_(indexCount),
                       indexIndexOffset_(indexIndexOffset){
 
@@ -74,7 +95,10 @@ namespace vulkan::raytracing {
         //wrapper around the above with the geometry type enum (triangles in this case) plus flags for the AS builder
         vk::AccelerationStructureGeometryKHR geometry{};
         geometry.setGeometryType(vk::GeometryTypeKHR::eTriangles);
-        geometry.setFlags(vk::GeometryFlagBitsKHR::eOpaque);
+        if (isOpaque) {
+            geometry.setFlags(vk::GeometryFlagBitsKHR::eOpaque);
+        }
+
         geometry.geometry.setTriangles(triangles);
 
         uint32_t primitiveCount = indexCount / 3;

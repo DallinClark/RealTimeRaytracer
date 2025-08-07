@@ -38,6 +38,9 @@ export namespace app  {
         double lastX_ = 0.0;
         double lastY_ = 0.0;
         float mouseSensitivity_ = 0.5f;
+
+        bool spinning_ = false;
+        float spinAngle_ = 0.0f;
     };
 
     Window::Window(const std::string_view windowName, const int windowWidth, const int windowHeight, const float mouseSensitivity)
@@ -68,6 +71,14 @@ export namespace app  {
             glfwSetWindowShouldClose(window_, true);
         }
 
+        // Toggle spinning mode when T is pressed
+        static bool tWasPressed = false;
+        bool tIsPressed = glfwGetKey(window_, GLFW_KEY_T) == GLFW_PRESS;
+        if (tIsPressed && !tWasPressed) {
+            spinning_ = !spinning_;
+        }
+        tWasPressed = tIsPressed;
+
         glm::vec3 camPosition = camera_->getPosition();
         bool camMoved = false;
 
@@ -87,10 +98,17 @@ export namespace app  {
             camPosition += (camera_->getRight() * camSpeed);
             camMoved = true;
         }
+
         if (camMoved) {
             camera_->setPosition(camPosition);
         }
+
+        // Rotate camera around Y axis if spinning
+        if (spinning_) {
+            camera_->rotateY(0.1);
+        }
     }
+
 
     void Window::mouseCallback(GLFWwindow* window, double xpos, double ypos) {
         auto* win = static_cast<Window*>(glfwGetWindowUserPointer(window));

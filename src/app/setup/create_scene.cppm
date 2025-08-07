@@ -3,6 +3,8 @@ module;
 #include <vulkan/vulkan.hpp>
 #include <../../external/LUT/ltc_matrix.h>
 #include <string>
+#include <unordered_map>
+#include <iostream>
 
 export module app.setup.create_scene;
 
@@ -35,7 +37,8 @@ export namespace app::setup {
             vulkan::memory::ImageSampler textureSampler;
         };
         static SceneReturnInfo createSceneFromObjectsAndLights(const vulkan::context::Device& device, vulkan::context::CommandPool &commandPool,
-                                                               std::vector<std::shared_ptr<scene::Object>>& objects, std::vector<std::shared_ptr<scene::AreaLight>>& areaLights);
+                                                               std::vector<std::shared_ptr<scene::Object>>& objects, const std::vector<std::pair<std::string, std::string>>& objMtlPairs,
+                                                               std::vector<std::shared_ptr<scene::AreaLight>>& areaLights);
 
         static std::vector<std::unique_ptr<vulkan::memory::Image>> createLTCImages(const vulkan::context::Device& device, vulkan::context::CommandPool& pool, int LTC_WIDTH, int LTC_HEIGHT);
 
@@ -43,7 +46,12 @@ export namespace app::setup {
     };
 
     CreateScene::SceneReturnInfo CreateScene::createSceneFromObjectsAndLights(const vulkan::context::Device& device, vulkan::context::CommandPool &commandPool,
-                                                      std::vector<std::shared_ptr<scene::Object>>& objects, std::vector<std::shared_ptr<scene::AreaLight>>& areaLights){
+                                                      std::vector<std::shared_ptr<scene::Object>>& objects, const std::vector<std::pair<std::string, std::string>>& objMtlPairs,
+                                                      std::vector<std::shared_ptr<scene::AreaLight>>& areaLights){
+
+        // Create the TLAS and BLAS and create scene::objects out of obj/mtl pairs
+        auto geoReturnInfo = app::setup::GeometryBuilder::createAccelerationStructures(device, commandPool, objects, objMtlPairs, areaLights);
+
         // TODO let textures be reused, use unordered map
         // make the image sampler
         vulkan::memory::ImageSampler texSampler(device);
@@ -60,22 +68,70 @@ export namespace app::setup {
         textures.push_back(std::move(LTCimages[0]));
         textures.push_back(std::move(LTCimages[1]));
 
+        std::unordered_map<std::string, int> loadedTextures;
+        std::string currMap;
+
         // If needed, create the textures
         for (auto& object : objects) {
             if (object->usesSpecularMap()) {
-                auto spec = core::file::createTextureImage(device, object->getSpecularPath(), commandPool, true);
-                object->setSpecularMapIndex(static_cast<uint32_t>(textures.size()));
-                textures.push_back(std::move(spec));
+                currMap = object->getSpecularPath();
+
+                auto it = loadedTextures.find(currMap);
+
+                if (it != loadedTextures.end()) {
+                    object->setSpecularMapIndex(it->second);
+                }
+                else {
+                    auto spec = core::file::createTextureImage(device, currMap, commandPool, true);
+                    object->setSpecularMapIndex(static_cast<uint32_t>(textures.size()));
+                    loadedTextures[currMap] = textures.size();
+                    textures.push_back(std::move(spec));
+                }
             }
             if (object->usesMetallicMap()) {
-                auto metal = core::file::createTextureImage(device, object->getMetallicPath(), commandPool, true);
-                object->setMetallicMapIndex(static_cast<uint32_t>(textures.size()));
-                textures.push_back(std::move(metal));
+                currMap = object->getMetallicPath();
+
+                auto it = loadedTextures.find(currMap);
+
+                if (it != loadedTextures.end()) {
+                    object->setMetallicMapIndex(it->second);
+                }
+                else {
+                    auto metallic = core::file::createTextureImage(device, currMap, commandPool, true);
+                    object->setMetallicMapIndex(static_cast<uint32_t>(textures.size()));
+                    loadedTextures[currMap] = textures.size();
+                    textures.push_back(std::move(metallic));
+                }
             }
             if (object->usesColorMap()) {
-                auto color = core::file::createTextureImage(device, object->getColorPath(), commandPool, false);
-                object->setColorMapIndex(static_cast<uint32_t>(textures.size()));
-                textures.push_back(std::move(color));
+                currMap = object->getColorPath();
+
+                auto it = loadedTextures.find(currMap);
+
+                if (it != loadedTextures.end()) {
+                    object->setColorMapIndex(it->second);
+                }
+                else {
+                    auto color = core::file::createTextureImage(device, currMap, commandPool, false);
+                    object->setColorMapIndex(static_cast<uint32_t>(textures.size()));
+                    loadedTextures[currMap] = textures.size();
+                    textures.push_back(std::move(color));
+                }
+            }
+            if (object->usesOpacityMap()) {
+                currMap = object->getOpacityPath();
+
+                auto it = loadedTextures.find(currMap);
+
+                if (it != loadedTextures.end()) {
+                    object->setOpacityMapIndex(it->second);
+                }
+                else {
+                    auto opacity = core::file::createTextureImage(device, currMap, commandPool, false);
+                    object->setOpacityMapIndex(static_cast<uint32_t>(textures.size()));
+                    loadedTextures[currMap] = textures.size();
+                    textures.push_back(std::move(opacity));
+                }
             }
         }
 
@@ -83,8 +139,6 @@ export namespace app::setup {
         for (const auto& image : textures) {
             descriptorTextures.push_back(image->getImageInfoWithSampler(texSampler.get()));
         };
-
-        auto geoReturnInfo = app::setup::GeometryBuilder::createTLASFromOBJsAndTransforms(device, commandPool, objects, areaLights);
 
         std::vector<scene::Object::GPUObjectInfo>    GPUObjects;
         std::vector<scene::AreaLight::GPUAreaLightInfo> GPUAreaLights;

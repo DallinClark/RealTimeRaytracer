@@ -28,22 +28,6 @@ export namespace app::setup  {
 
     class GeometryBuilder {
     public:
-        // Holds Info for each BLAS
-        struct BLASCreateInfo {
-            vk::DeviceSize vertexOffset;
-            vk::DeviceSize indexOffset;
-
-            vk::DeviceSize vertexSize;
-            vk::DeviceSize indexSize;
-
-            uint32_t       vertexCount;
-            uint32_t       indexCount;
-
-            uint32_t       vertexIndexOffset;
-            uint32_t       indexIndexOffset;
-
-            uint32_t       vertexStride = sizeof(glm::vec3); // or your actual vertex layout
-        };
 
         struct GeometryReturnInfo {
             std::unique_ptr<vulkan::raytracing::TLAS>                tlas;
@@ -55,24 +39,26 @@ export namespace app::setup  {
             vulkan::memory::Buffer                                   indexBuffer;
         };
 
-        static GeometryReturnInfo createTLASFromOBJsAndTransforms(const vulkan::context::Device& device, vulkan::context::CommandPool& commandPool,
-                                                                  std::vector<std::shared_ptr<scene::Object>>& objects,
-                                                                  std::vector<std::shared_ptr<scene::AreaLight>>& areaLights);
+        static GeometryReturnInfo createAccelerationStructures(const vulkan::context::Device& device, vulkan::context::CommandPool& commandPool,
+                                                                                    std::vector<std::shared_ptr<scene::Object>>& objects,
+                                                                                    const std::vector<std::pair<std::string, std::string>>& objMtlPairs,
+                                                                                    std::vector<std::shared_ptr<scene::AreaLight>>& areaLights);
 
     private:
     };
 
-    GeometryBuilder::GeometryReturnInfo GeometryBuilder::createTLASFromOBJsAndTransforms(const vulkan::context::Device& device, vulkan::context::CommandPool& commandPool,
+    GeometryBuilder::GeometryReturnInfo GeometryBuilder::createAccelerationStructures(const vulkan::context::Device& device, vulkan::context::CommandPool& commandPool,
                                                                                          std::vector<std::shared_ptr<scene::Object>>& objects,
+                                                                                         const std::vector<std::pair<std::string, std::string>>& objMtlPairs,
                                                                                          std::vector<std::shared_ptr<scene::AreaLight>>& areaLights) {
 
         std::vector<glm::vec3> vertexPositions{};
         std::vector<uint32_t> indices{};
         std::vector<scene::geometry::Vertex> vertices{};
-        std::vector<BLASCreateInfo> meshDatas{};
+        std::vector<vulkan::raytracing::BLAS::BLASCreateInfo> meshDatas{};
 
-        vk::DeviceSize currVertexOffset = 0;
-        vk::DeviceSize currIndexOffset  = 0;
+        vk::DeviceSize currVertexOffset = vertices.size() * sizeof(glm::vec3);
+        vk::DeviceSize currIndexOffset = indices.size() * sizeof(uint32_t);
 
         // Lights always go first before objects
         size_t prevVertexCount = vertexPositions.size();
@@ -109,7 +95,7 @@ export namespace app::setup  {
             size_t newVertexCount = vertexPositions.size() - prevVertexCount;
             size_t newIndexCount  = indices.size() - prevIndexCount;
 
-            BLASCreateInfo meshData;
+            vulkan::raytracing::BLAS::BLASCreateInfo meshData;
             meshData.vertexOffset = currVertexOffset;
             meshData.indexOffset  = currIndexOffset;
             meshData.vertexCount  = static_cast<uint32_t>(newVertexCount);
@@ -118,6 +104,12 @@ export namespace app::setup  {
             meshData.indexSize    = newIndexCount * sizeof(uint32_t);
             meshData.vertexIndexOffset = prevVertexCount;
             meshData.indexIndexOffset  = prevIndexCount;
+
+            if (instance->usesOpacityMap()) {
+                meshData.isOpaque = false;
+            } else {
+                meshData.isOpaque = true;
+            }
 
             currVertexOffset += newVertexCount * sizeof(glm::vec3);
             currIndexOffset  += newIndexCount * sizeof(uint32_t);
@@ -134,6 +126,12 @@ export namespace app::setup  {
 
         for (auto& object : objects) {
             processGeometryObject(object);
+        }
+
+        // load objects and data from obj and mtl pairs
+        for (const auto& [objPath, mtlPath] : objMtlPairs) {
+            // Load geometry and material-assigned objects
+            core::file::loadOBJandMTL(objPath, mtlPath, objects, vertexPositions, indices, vertices, meshDatas);
         }
 
         // creates the index and vertex buffers
@@ -160,15 +158,12 @@ export namespace app::setup  {
             indexBufferFillRegions.push_back(indexFill);
         }
 
-        vk::DeviceSize totalVertexSize = vertexPositions.size() * sizeof(glm::vec3);
-        vk::DeviceSize totalIndexSize  = indices.size() * sizeof(uint32_t);
-
         //create vertex and index buffer
-        vulkan::memory::Buffer vertexBuffer = vulkan::memory::Buffer::createDeviceLocalBuffer(commandPool, device, totalVertexSize, vk::BufferUsageFlagBits::eVertexBuffer |
+        vulkan::memory::Buffer vertexBuffer = vulkan::memory::Buffer::createDeviceLocalBuffer(commandPool, device, vertexBufferSize, vk::BufferUsageFlagBits::eVertexBuffer |
                                                  vk::BufferUsageFlagBits::eShaderDeviceAddress | vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR |
                                                  vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, vertexBufferFillRegions);
 
-        vulkan::memory::Buffer indexBuffer = vulkan::memory::Buffer::createDeviceLocalBuffer(commandPool, device, totalIndexSize,
+        vulkan::memory::Buffer indexBuffer = vulkan::memory::Buffer::createDeviceLocalBuffer(commandPool, device, indexBufferSize,
                                                                                               vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress |
                                                                                               vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR |
                                                                                               vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, indexBufferFillRegions);
@@ -194,7 +189,8 @@ export namespace app::setup  {
                     mesh.indexCount,
                     vk::IndexType::eUint32,
                     mesh.vertexIndexOffset,
-                    mesh.indexIndexOffset
+                    mesh.indexIndexOffset,
+                    mesh.isOpaque
             );
 
             blass.push_back(newBLAS.get());      // collect raw pointer

@@ -9,6 +9,7 @@ export module vulkan.compute_pipeline;
 import core.file;
 import core.log;
 import vulkan.context.device;
+import app.structs;
 
 namespace vulkan {
 
@@ -16,9 +17,11 @@ namespace vulkan {
     public:
         ComputePipeline(const context::Device &device,
                         const std::vector<vk::DescriptorSetLayout>& descriptorSetLayouts,
-                        std::string_view computeShaderPath) : device_(device), descriptorSetLayouts_(descriptorSetLayouts) {
+                        std::string_view computeShaderPath, bool needsPushConstant = false,
+                        size_t push_size = 0.0)
+                        : device_(device), descriptorSetLayouts_(descriptorSetLayouts) {
             createShaderModule(computeShaderPath);
-            createPipelineLayout();
+            createPipelineLayout(needsPushConstant, push_size);
             createPipeline();
         }
 
@@ -39,19 +42,20 @@ namespace vulkan {
             computeShader_ = device_.get().createShaderModuleUnique(createInfo);
         }
 
-        void createPipelineLayout() {
+        void createPipelineLayout(bool needsPushConstant, size_t pushSize) {
             vk::PipelineLayoutCreateInfo layoutInfo{};
             layoutInfo.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts_.size());
             layoutInfo.pSetLayouts = descriptorSetLayouts_.data();
 
-            // Push Constant is just an int to tell which image
-            vk::PushConstantRange pushConstantRange{};
-            pushConstantRange.setStageFlags(vk::ShaderStageFlagBits::eCompute);
-            pushConstantRange.setOffset(0);
-            pushConstantRange.setSize(sizeof(int));
+            if (needsPushConstant) {
+                vk::PushConstantRange pushConstantRange{};
+                pushConstantRange.setStageFlags(vk::ShaderStageFlagBits::eCompute);
+                pushConstantRange.setOffset(0);
+                pushConstantRange.setSize(pushSize);
 
-            layoutInfo.setPushConstantRangeCount(1);
-            layoutInfo.setPPushConstantRanges(&pushConstantRange);
+                layoutInfo.setPushConstantRangeCount(1);
+                layoutInfo.setPPushConstantRanges(&pushConstantRange);
+            }
 
             pipelineLayout_ = device_.get().createPipelineLayoutUnique(layoutInfo);
         }

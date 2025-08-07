@@ -17,8 +17,8 @@ namespace scene {
 
     export class AreaLight {
     public:
-        AreaLight(float intensity, glm::vec3 color, bool isTwoSided = false, const std::string& objPath = "square")
-                : intensity_(intensity), color_(color), isTwoSided_(isTwoSided), objPath_(objPath) {};
+        AreaLight(float intensity, glm::vec3 color, bool isTwoSided = false, bool isVisible = true, const std::string& objPath = "square")
+                : intensity_(intensity), color_(color), isTwoSided_(isTwoSided), isVisible_(isVisible), objPath_(objPath) {};
 
         struct alignas(16) GPUAreaLightInfo {
             glm::vec3 color;
@@ -54,10 +54,13 @@ namespace scene {
 
         void setNumTriangles(uint32_t num) { numTriangles_ = num; }
 
+        const bool usesOpacityMap() { return false; } // needed for a funciton
+
     private:
         float intensity_;
         glm::vec3 color_;
         bool isTwoSided_;
+        bool isVisible_;
 
         uint32_t blasIndex_ = 0; // this light's index into the blas vector, used when making the tlas
         uint32_t instanceIndex_ = 0; // this light's custom index in the TLAS

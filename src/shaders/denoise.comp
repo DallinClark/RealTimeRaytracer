@@ -2,48 +2,116 @@
 #extension GL_EXT_shader_explicit_arithmetic_types_float32 : require
 #extension GL_EXT_nonuniform_qualifier : enable
 
-// Work with 8x8 threads at a time in one workgroup
 layout (local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+float POSITION_SCALE = 1.0;
+
 
 layout(push_constant) uniform PushConstants {
-    int imageIndex;  // Match the type and size above
+    int step_width;
+    float c_phi;
+    float n_phi;
+    float p_phi;
+    int denoisedImagesAreOutput;
+    int isShadowedImage;
 };
 
 layout(set = 0, binding = 1, rgba8) uniform image2D shadowedSampledImage;
 layout(set = 0, binding = 2, rgba8) uniform image2D unshadowedSampledImage;
 layout(set = 0, binding = 3, rgba8) uniform image2D denoisedShadowedImage;
-layout(set = 0, binding = 4, rgba8) uniform image2D denoisedUnShadowedImage;
+layout(set = 0, binding = 4, rgba8) uniform image2D denoisedUnshadowedImage;
+layout(set = 0, binding = 6, rgba8) uniform image2D normalImage;
+layout(set = 0, binding = 7, rgba8) uniform image2D positionImage;
+
+const int KERNEL_RADIUS = 2;
+const int KERNEL_SIZE = (2 * KERNEL_RADIUS) + 1;
+
+float kernel[KERNEL_SIZE * KERNEL_SIZE] = float[](
+    1,  4,  7,  4, 1,
+    4, 16, 26, 16, 4,
+    7, 26, 41, 26, 7,
+    4, 16, 26, 16, 4,
+    1,  4,  7,  4, 1
+);
+
+vec4 readInputImage(ivec2 coord) {
+    if (isShadowedImage == 1) {
+        if (denoisedImagesAreOutput == 1) {
+            return imageLoad(shadowedSampledImage, coord);
+        } else {
+            return imageLoad(denoisedShadowedImage, coord);
+        }
+    }
+    else {
+        if (denoisedImagesAreOutput == 1) {
+            return imageLoad(unshadowedSampledImage, coord);
+        } else {
+            return imageLoad(denoisedUnshadowedImage, coord);
+        }
+    }
+}
+
+
 
 void main() {
     ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
 
+    ivec2 dims = imageSize(shadowedSampledImage);
+    vec2 step = vec2(1./dims.x, 1./dims.y);
+    vec4 color = vec4(0.0);
+    color = readInputImage(coord);
+    vec4 normal = imageLoad(normalImage, coord);
+    vec4 position = imageLoad(positionImage, coord);
+
+    float cum_weight = 0.0;
     vec4 sum = vec4(0.0);
-    int count = 0;
+    int k = 0;
+    for (int dy = -KERNEL_RADIUS; dy <= KERNEL_RADIUS; dy++) {
+        for (int dx = -KERNEL_RADIUS; dx <= KERNEL_RADIUS; dx++) {
+            ivec2 offset = coord + ivec2(dx * step_width, dy * step_width);
 
-    if (imageIndex == 0) {
-        ivec2 dims = imageSize(shadowedSampledImage);
-        for (int dy = -1; dy <= 1; ++dy) {
-            for (int dx = -1; dx <= 1; ++dx) {
-                ivec2 offset = coord + ivec2(dx, dy);
-                if (offset.x >= 0 && offset.x < dims.x && offset.y >= 0 && offset.y < dims.y) {
-                    sum += imageLoad(shadowedSampledImage, offset);
-                    count++;
-                }
-            }
+            if (offset.x < 0 || offset.y < 0 || offset.x >= dims.x || offset.y >= dims.y)
+                continue;
+
+            vec4 color_tmp = readInputImage(offset);
+            vec4 normal_tmp = imageLoad(normalImage, offset);
+            vec4 position_tmp = imageLoad(positionImage, offset);
+
+            vec4 t = color - color_tmp;
+            float dist2 = dot(t, t);
+            float color_weight = min(exp(-(dist2)/c_phi), 1.0);
+
+            t = normal - normal_tmp;
+            dist2 = max(dot(t, t)/(step_width*step_width),0.0);
+            float normal_weight = min(exp(-(dist2)/n_phi), 1.0);
+
+            t = position - position_tmp;
+            t *= POSITION_SCALE;
+            dist2 = dot(t, t);
+            float pos_weight = min(exp(-(dist2)/p_phi),1.0);
+
+            float weight = color_weight * normal_weight * pos_weight * kernel[k];
+            cum_weight += weight;
+            sum += color_tmp * weight;
+
+            ++k;
         }
-        imageStore(denoisedShadowedImage, coord, sum / float(count));
-    } else {
-        ivec2 dims = imageSize(unshadowedSampledImage);
-        for (int dy = -1; dy <= 1; ++dy) {
-            for (int dx = -1; dx <= 1; ++dx) {
-                ivec2 offset = coord + ivec2(dx, dy);
-                if (offset.x >= 0 && offset.x < dims.x && offset.y >= 0 && offset.y < dims.y) {
-                    sum += imageLoad(unshadowedSampledImage, offset);
-                    count++;
-                }
-            }
-        }
-        imageStore(denoisedUnShadowedImage, coord, sum / float(count));
+
     }
-}
+    sum /= max(cum_weight, 1e-5);
 
+    if (isShadowedImage == 1) {
+        if (denoisedImagesAreOutput == 0) {
+            imageStore(shadowedSampledImage, coord, sum);
+        } else {
+            imageStore(denoisedShadowedImage, coord, sum);
+        }
+    } else {
+        if (denoisedImagesAreOutput == 0) {
+            imageStore(unshadowedSampledImage, coord, sum);
+        }
+        else {
+            imageStore(denoisedUnshadowedImage, coord, sum);
+        }
+    }
+
+}
